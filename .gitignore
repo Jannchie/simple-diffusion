@@ -1,0 +1,7 @@
+dist
+outputs
+__pycache__
+cache.json
+params.txt
+.coverage
+coverage.xml
