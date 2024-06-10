@@ -98,19 +98,19 @@ class CheckpointInfo:
                 errors.display(e, f"reading metadata for {filename}")
 
         self.name = name
-        self.name_for_extra = os.path.splitext(os.path.basename(filename))[0]
+        # self.name_for_extra = os.path.splitext(os.path.basename(filename))[0]
         self.model_name = os.path.splitext(name.replace("/", "_").replace("\\", "_"))[0]
-        self.hash = model_hash(filename)
+        # self.hash = model_hash(filename)
 
-        self.sha256 = hashes.sha256_from_cache(self.filename, f"checkpoint/{name}")
-        self.shorthash = self.sha256[:10] if self.sha256 else None
+        # self.sha256 = hashes.sha256_from_cache(self.filename, f"checkpoint/{name}")
+        # self.shorthash = self.sha256[:10] if self.sha256 else None
 
-        self.title = name if self.shorthash is None else f"{name} [{self.shorthash}]"
-        self.short_title = self.name_for_extra if self.shorthash is None else f"{self.name_for_extra} [{self.shorthash}]"
+        # self.title = name if self.shorthash is None else f"{name} [{self.shorthash}]"
+        # self.short_title = self.name_for_extra if self.shorthash is None else f"{self.name_for_extra} [{self.shorthash}]"
 
-        self.ids = [self.hash, self.model_name, self.title, name, self.name_for_extra, f"{name} [{self.hash}]"]
-        if self.shorthash:
-            self.ids += [self.shorthash, self.sha256, f"{self.name} [{self.shorthash}]", f"{self.name_for_extra} [{self.shorthash}]"]
+        # self.ids = [self.hash, self.model_name, self.title, name, self.name_for_extra, f"{name} [{self.hash}]"]
+        # if self.shorthash:
+        #     self.ids += [self.shorthash, self.sha256, f"{self.name} [{self.shorthash}]", f"{self.name_for_extra} [{self.shorthash}]"]
 
     def register(self):
         checkpoints_list[self.title] = self
@@ -336,21 +336,18 @@ def read_state_dict(checkpoint_file, print_global_state=False, map_location=None
 
 
 def get_checkpoint_state_dict(checkpoint_info: CheckpointInfo, timer):
-    sd_model_hash = checkpoint_info.calculate_shorthash()
-    timer.record("calculate hash")
+    # sd_model_hash = checkpoint_info.calculate_shorthash()
+    # timer.record("calculate hash")
 
-    if checkpoint_info in checkpoints_loaded:
-        # use checkpoint cache
-        logging.info(f"Loading weights [{sd_model_hash}] from cache")
-        # move to end as latest
-        checkpoints_loaded.move_to_end(checkpoint_info)
-        return checkpoints_loaded[checkpoint_info]
+    # if checkpoint_info in checkpoints_loaded:
+    #     # use checkpoint cache
+    #     # logging.info(f"Loading weights [{sd_model_hash}] from cache")
+    #     # move to end as latest
+    #     checkpoints_loaded.move_to_end(checkpoint_info)
+    #     return checkpoints_loaded[checkpoint_info]
 
-    logging.info(f"Loading weights [{sd_model_hash}] from {checkpoint_info.filename}")
-    res = read_state_dict(checkpoint_info.filename)
-    timer.record("load weights from disk")
-
-    return res
+    logging.info(f"Loading weights from {checkpoint_info.filename}")
+    return read_state_dict(checkpoint_info.filename)
 
 
 class SkipWritingToConfig:
@@ -593,10 +590,6 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
     else:
         state_dict = get_checkpoint_state_dict(checkpoint_info, timer)
 
-    if shared.opts.sd_checkpoint_cache > 0:
-        # cache newly loaded model
-        checkpoints_loaded[checkpoint_info] = state_dict.copy()
-
     sd_model = forge_loader.load_model_for_a1111(timer=timer, checkpoint_info=checkpoint_info, state_dict=state_dict)
     sd_model.filename = checkpoint_info.filename
 
@@ -606,7 +599,7 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
     while len(checkpoints_loaded) > shared.opts.sd_checkpoint_cache:
         checkpoints_loaded.popitem(last=False)
 
-    shared.opts.data["sd_checkpoint_hash"] = checkpoint_info.sha256
+    # shared.opts.data["sd_checkpoint_hash"] = checkpoint_info.sha256
 
     sd_vae.delete_base_vae()
     sd_vae.clear_loaded_vae()

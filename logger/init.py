@@ -13,8 +13,4 @@ class BetterReprHighlighter(ReprHighlighter):
 
 def initialize():
     FORMAT = "%(name)s: %(message)s"
-    logging.basicConfig(level=logging.DEBUG, format=FORMAT, datefmt="[%X]", handlers=[RichHandler(highlighter=BetterReprHighlighter())])
-    logging.getLogger("transformers").setLevel(logging.WARNING)
-    logging.getLogger("PIL.Image").setLevel(logging.WARNING)
-    logging.getLogger("matplotlib").setLevel(logging.WARNING)
-    logging.getLogger("git.cmd").setLevel(logging.WARNING)
+    logging.basicConfig(level=logging.INFO, format=FORMAT, datefmt="[%X]", handlers=[RichHandler(highlighter=BetterReprHighlighter())])

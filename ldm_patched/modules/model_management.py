@@ -129,9 +129,9 @@ def get_total_memory(dev=None, torch_total_too=False):
     return (mem_total, mem_total_torch) if torch_total_too else mem_total
 
 
-total_vram = get_total_memory(get_torch_device()) / (1024 * 1024 * 1024)
-total_ram = psutil.virtual_memory().total / (1024 * 1024 * 1024)
-logging.info("Total VRAM {:0.0f} GB, total RAM {:0.0f} GB".format(total_vram, total_ram))
+total_vram = get_total_memory(get_torch_device()) / (1024 * 1024)
+total_ram = psutil.virtual_memory().total / (1024 * 1024)
+logging.info("Total VRAM {:0.0f} GB, total RAM {:0.0f} GB".format(total_vram / 1024, total_ram / 1024))
 if not args.always_normal_vram and not args.always_cpu and (lowvram_available and total_vram <= 4096):
     print("Trying to enable lowvram mode because your GPU seems to have 4GB or less. If you don't want this use: --always-normal-vram")
     set_vram_to = VRAMState.LOW_VRAM

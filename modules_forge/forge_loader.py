@@ -198,7 +198,7 @@ def load_model_for_a1111(timer, checkpoint_info=None, state_dict=None):
 
     timer.record("forge set components")
 
-    sd_model_hash = checkpoint_info.calculate_shorthash()
+    # sd_model_hash = checkpoint_info.calculate_shorthash()
     timer.record("calculate hash")
 
     if getattr(sd_model, "parameterization", None) == "v":
@@ -210,7 +210,7 @@ def load_model_for_a1111(timer, checkpoint_info=None, state_dict=None):
     sd_model.is_ssd = sd_model.is_sdxl and "model.diffusion_model.middle_block.1.transformer_blocks.0.attn1.to_q.weight" not in sd_model.state_dict().keys()
     if sd_model.is_sdxl:
         extend_sdxl(sd_model)
-    sd_model.sd_model_hash = sd_model_hash
+    # sd_model.sd_model_hash = sd_model_hash
     sd_model.sd_model_checkpoint = checkpoint_info.filename
     sd_model.sd_checkpoint_info = checkpoint_info
 

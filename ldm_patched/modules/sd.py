@@ -36,7 +36,7 @@ def load_model_weights(model, sd):
             w = sd.pop(x)
             del w
     if m := set(m):
-        logging.info("extra: {m}")
+        logging.info(f"extra: {m}")
     return model
 
 
