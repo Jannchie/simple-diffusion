@@ -52,7 +52,7 @@ from modules.sd_samplers_common import (
     decode_first_stage,
     images_tensor_to_samples,
 )
-from modules.shared import cmd_opts, opts, state
+from modules.shared import cmd_opts, opts
 from modules_forge.forge_util import apply_circular_forge
 
 console = rich.get_console()
@@ -63,8 +63,7 @@ opt_f = 8
 
 def setup_color_correction(image):
     logging.info("Calibrating color correction.")
-    correction_target = cv2.cvtColor(np.asarray(image.copy()), cv2.COLOR_RGB2LAB)
-    return correction_target
+    return cv2.cvtColor(np.asarray(image.copy()), cv2.COLOR_RGB2LAB)
 
 
 def apply_color_correction(correction, original_image):
@@ -133,17 +132,15 @@ def txt2img_image_conditioning(sd_model, x, width, height):
     else:
         sd = sd_model.model.state_dict()
         diffusion_model_input = sd.get("diffusion_model.input_blocks.0.0.weight", None)
-        if diffusion_model_input is not None:
-            if diffusion_model_input.shape[1] == 9:
-                # The "masked-image" in this case will just be all 0.5 since the entire image is masked.
-                image_conditioning = torch.ones(x.shape[0], 3, height, width, device=x.device) * 0.5
-                image_conditioning = images_tensor_to_samples(image_conditioning, approximation_indexes.get(opts.sd_vae_encode_method))
+        if diffusion_model_input is not None and diffusion_model_input.shape[1] == 9:
+            image_conditioning = torch.ones(x.shape[0], 3, height, width, device=x.device) * 0.5
+            image_conditioning = images_tensor_to_samples(image_conditioning, approximation_indexes.get(opts.sd_vae_encode_method))
 
-                # Add the fake full 1s mask to the first dimension.
-                image_conditioning = torch.nn.functional.pad(image_conditioning, (0, 0, 0, 0, 1, 0), value=1.0)
-                image_conditioning = image_conditioning.to(x.dtype)
+            # Add the fake full 1s mask to the first dimension.
+            image_conditioning = torch.nn.functional.pad(image_conditioning, (0, 0, 0, 0, 1, 0), value=1.0)
+            image_conditioning = image_conditioning.to(x.dtype)
 
-                return image_conditioning
+            return image_conditioning
 
         # Dummy zero conditioning if we're not using inpainting or unclip models.
         # Still takes up a bit of memory, but no encoder call.
@@ -527,7 +524,7 @@ class StableDiffusionProcessing:
 
     def save_samples(self) -> bool:
         """Returns whether generated images need to be written to disk"""
-        return opts.samples_save and not self.do_not_save_samples and (opts.save_incomplete_images or not shared.state.interrupted and not shared.state.skipped)
+        return opts.samples_save and not self.do_not_save_samples and opts.save_incomplete_images
 
 
 class Processed:
@@ -560,7 +557,7 @@ class Processed:
         self.extra_generation_params = p.extra_generation_params
         self.index_of_first_image = index_of_first_image
         self.styles = p.styles
-        self.job_timestamp = shared.state.job_timestamp
+        # self.job_timestamp = shared.state.job_timestamp
         self.clip_skip = opts.CLIP_stop_at_last_layers
         self.token_merging_ratio = p.token_merging_ratio
         self.token_merging_ratio_hr = p.token_merging_ratio_hr
@@ -616,7 +613,7 @@ class Processed:
             "index_of_first_image": self.index_of_first_image,
             "infotexts": self.infotexts,
             "styles": self.styles,
-            "job_timestamp": self.job_timestamp,
+            # "job_timestamp": self.job_timestamp,
             "clip_skip": self.clip_skip,
             "is_using_inpainting_conditioning": self.is_using_inpainting_conditioning,
             "version": self.version,
@@ -831,19 +828,10 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
 
             sd_unet.apply_unet()
 
-        if shared.state.job_count == -1:
-            shared.state.job_count = p.n_iter
-
         for n in range(p.n_iter):
             p.iteration = n
 
-            if shared.state.skipped:
-                shared.state.skipped = False
-
-            if shared.state.interrupted or shared.state.stopping_generation:
-                break
-
-            # sd_models.reload_model_weights()  # model can be changed for example by refiner
+            sd_models.reload_model_weights(p.sd_model.sd_checkpoint_info)  # model can be changed for example by refiner
 
             p.sd_model.forge_objects = p.sd_model.forge_objects_original.shallow_copy()
             p.prompts = p.all_prompts[n * p.batch_size : (n + 1) * p.batch_size]
@@ -950,7 +938,7 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
 
             devices.torch_gc()
 
-            shared.state.nextjob()
+            # shared.state.nextjob()
 
             if p.scripts is not None:
                 p.scripts.postprocess_batch(p, x_samples_ddim, batch_number=n)

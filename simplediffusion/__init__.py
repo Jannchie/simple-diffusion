@@ -8,7 +8,6 @@ from pathlib import Path
 
 import modules.sd_models
 from modules.processing import StableDiffusionProcessingTxt2Img, process_images_inner
-from modules.shared_init import initialize
 from simplediffusion.utils import Timer
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)

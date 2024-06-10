@@ -10,7 +10,6 @@ from modules import (
     shared_cmd_options,
     shared_gradio_themes,
     shared_items,
-    shared_state,
     shared_total_tqdm,
     styles,
     util,
@@ -27,17 +26,11 @@ cmd_opts = shared_cmd_options.cmd_opts
 eight_load_location = None if cmd_opts.lowram else "cpu"
 
 
-state = shared_state.State()
-
 styles_filename = cmd_opts.styles_file = cmd_opts.styles_file if len(cmd_opts.styles_file) > 0 else [os.path.join(data_path, "styles.csv")]
 prompt_styles = styles.StyleDatabase(styles_filename)
 
 
 interrogator = interrogate.InterrogateModels("interrogate")
-
-
-total_tqdm = shared_total_tqdm.TotalTQDM()
-
 
 parser = shared_cmd_options.parser
 

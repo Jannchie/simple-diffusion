@@ -193,17 +193,21 @@ def get_closet_checkpoint_match(search_string):
     if not search_string:
         return None
 
-    checkpoint_info = checkpoint_aliases.get(search_string, None)
+    checkpoint_info = checkpoint_aliases.get(search_string)
     if checkpoint_info is not None:
         return checkpoint_info
 
-    found = sorted([info for info in checkpoints_list.values() if search_string in info.title], key=lambda x: len(x.title))
-    if found:
+    if found := sorted(
+        [info for info in checkpoints_list.values() if search_string in info.title],
+        key=lambda x: len(x.title),
+    ):
         return found[0]
 
     search_string_without_checksum = re.sub(re_strip_checksum, "", search_string)
-    found = sorted([info for info in checkpoints_list.values() if search_string_without_checksum in info.title], key=lambda x: len(x.title))
-    if found:
+    if found := sorted(
+        [info for info in checkpoints_list.values() if search_string_without_checksum in info.title],
+        key=lambda x: len(x.title),
+    ):
         return found[0]
 
     return None
@@ -306,12 +310,9 @@ def read_metadata_from_safetensors(filename):
         res = {}
         for k, v in json_obj.get("__metadata__", {}).items():
             res[k] = v
-            if isinstance(v, str) and v[0:1] == "{":
-                try:
+            if isinstance(v, str) and v[:1] == "{":
+                with contextlib.suppress(Exception):
                     res[k] = json.loads(v)
-                except Exception:
-                    pass
-
         return res
 
 
@@ -331,8 +332,7 @@ def read_state_dict(checkpoint_file, print_global_state=False, map_location=None
     if print_global_state and "global_step" in pl_sd:
         print(f"Global Step: {pl_sd['global_step']}")
 
-    sd = get_state_dict_from_checkpoint(pl_sd)
-    return sd
+    return get_state_dict_from_checkpoint(pl_sd)
 
 
 def get_checkpoint_state_dict(checkpoint_info: CheckpointInfo, timer):
@@ -369,14 +369,13 @@ def check_fp8(model):
     if model is None:
         return None
     if devices.get_optimal_device_name() == "mps":
-        enable_fp8 = False
+        return False
     elif shared.opts.fp8_storage == "Enable":
-        enable_fp8 = True
+        return True
     elif getattr(model, "is_sdxl", False) and shared.opts.fp8_storage == "Enable for SDXL":
-        enable_fp8 = True
+        return True
     else:
-        enable_fp8 = False
-    return enable_fp8
+        return False
 
 
 def load_model_weights(model, checkpoint_info: CheckpointInfo, state_dict, timer):
@@ -566,10 +565,8 @@ def send_model_to_trash(m):
     pass
 
 
-def load_model(checkpoint_info=None, already_loaded_state_dict=None):
+def load_model(checkpoint_info, already_loaded_state_dict=None):
     from modules import sd_hijack
-
-    checkpoint_info = checkpoint_info or select_checkpoint()
 
     timer = Timer()
 
@@ -632,7 +629,7 @@ def reuse_model_from_already_loaded(sd_model, checkpoint_info, timer):
     pass
 
 
-def reload_model_weights(sd_model=None, info=None, forced_reload=False):
+def reload_model_weights(info=None):
     return load_model(info)
 
 

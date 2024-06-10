@@ -16,7 +16,9 @@ from modules import (
     sd_vae_taesd,
     shared,
 )
-from modules.shared import opts, state
+
+# only type hints
+from modules.shared import opts
 from modules_forge.forge_sampler import sampling_cleanup, sampling_prepare
 
 SamplerDataTuple = namedtuple("SamplerData", ["name", "constructor", "aliases", "options"])
@@ -47,8 +49,8 @@ approximation_indexes = {"Full": 0, "Approx NN": 1, "Approx cheap": 2, "TAESD": 
 
 def samples_to_images_tensor(sample, approximation=None, model=None):
     """Transforms 4-channel latent space images into 3-channel RGB image tensors, with values in range [-1, 1]."""
-
-    if approximation is None or (shared.state.interrupted and opts.live_preview_fast_interrupt):
+    live_preview_fast_interrupt = False
+    if approximation is None or live_preview_fast_interrupt:
         approximation = approximation_indexes.get(opts.show_progress_type, 0)
         if approximation == 0:
             approximation = 1
@@ -114,11 +116,10 @@ def images_tensor_to_samples(image, approximation=None, model=None):
 
 
 def store_latent(decoded):
-    shared.state.current_latent = decoded
+    # shared.state.current_latent = decoded
 
-    if opts.live_previews_enable and opts.show_progress_every_n_steps > 0 and shared.state.sampling_step % opts.show_progress_every_n_steps == 0:
-        if not shared.parallel_processing_allowed:
-            shared.state.assign_current_image(sample_to_image(decoded))
+    if opts.live_previews_enable and opts.show_progress_every_n_steps > 0 and shared.state.sampling_step % opts.show_progress_every_n_steps == 0 and not shared.parallel_processing_allowed:
+        shared.state.assign_current_image(sample_to_image(decoded))
 
 
 def is_sampler_using_eta_noise_seed_delta(p):
@@ -243,30 +244,31 @@ class Sampler:
 
         self.conditioning_key = shared.sd_model.model.conditioning_key
 
-        self.p = None
+        from modules.processing import StableDiffusionProcessing
+
+        self.p: "StableDiffusionProcessing" = None
         self.model_wrap_cfg = None
         self.sampler_extra_args = None
         self.options = {}
+        self.step = 0
 
     def callback_state(self, d):
         step = d["i"]
 
         if self.stop_at is not None and step > self.stop_at:
             raise InterruptedException
-
-        shared.state.sampling_step = step
-        shared.total_tqdm.update()
+        self.step = step
+        # shared.total_tqdm.update()
 
     def launch_sampling(self, steps, func):
         self.model_wrap_cfg.steps = steps
         self.model_wrap_cfg.total_steps = self.config.total_steps(steps)
-        shared.state.sampling_steps = steps
-        shared.state.sampling_step = 0
-
+        # shared.state.sampling_steps = steps
+        # shared.state.sampling_step = 0
         try:
             return func()
         except RecursionError:
-            print("Encountered RecursionError during sampling, returning last latent. " "rho >5 with a polyexponential scheduler may cause this error. " "You should try to use a smaller rho value instead.")
+            print("Encountered RecursionError during sampling, returning last latent. " "rho >5 with a polyexponential scheduler may cause this error. " "You should try to use a smaller rho value instead.")  # type: ignore
             return self.last_latent
         except InterruptedException:
             return self.last_latent

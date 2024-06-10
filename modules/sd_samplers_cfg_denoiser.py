@@ -1,16 +1,13 @@
 import torch
 
 import modules.shared as shared
-from modules import devices, prompt_parser, sd_samplers_common
+from modules import prompt_parser, sd_samplers_common
 from modules.script_callbacks import (
     AfterCFGCallbackParams,
-    CFGDenoisedParams,
     CFGDenoiserParams,
     cfg_after_cfg_callback,
-    cfg_denoised_callback,
     cfg_denoiser_callback,
 )
-from modules.shared import opts, state
 from modules_forge import forge_sampler
 
 
@@ -156,18 +153,15 @@ class CFGDenoiser(torch.nn.Module):
         return cond, uncond
 
     def forward(self, x, sigma, uncond, cond, cond_scale, s_min_uncond, image_cond):
-        if shared.state.interrupted or shared.state.skipped:
-            raise sd_samplers_common.InterruptedException
 
         original_x_device = x.device
         original_x_dtype = x.dtype
-
         if self.classic_ddim_eps_estimation:
             acd = self.inner_model.inner_model.alphas_cumprod
             fake_sigmas = ((1 - acd) / acd) ** 0.5
             real_sigma = fake_sigmas[sigma.round().long().clip(0, int(fake_sigmas.shape[0]))]
             real_sigma_data = 1.0
-            x = x * (((real_sigma ** 2.0 + real_sigma_data ** 2.0) ** 0.5)[:, None, None, None])
+            x = x * (((real_sigma**2.0 + real_sigma_data**2.0) ** 0.5)[:, None, None, None])
             sigma = real_sigma
 
         if sd_samplers_common.apply_refiner(self, x):
@@ -181,7 +175,7 @@ class CFGDenoiser(torch.nn.Module):
             noisy_initial_latent = self.init_latent + sigma[:, None, None, None] * torch.randn_like(self.init_latent).to(self.init_latent)
             x = x * self.nmask + noisy_initial_latent * self.mask
 
-        denoiser_params = CFGDenoiserParams(x, image_cond, sigma, shared.state.sampling_step, shared.state.sampling_steps, cond, uncond, self)
+        denoiser_params = CFGDenoiserParams(x, image_cond, sigma, self.step, self.steps, cond, uncond, self)
         cfg_denoiser_callback(denoiser_params)
 
         denoised = forge_sampler.forge_sample(self, denoiser_params=denoiser_params, cond_scale=cond_scale, cond_composition=cond_composition)
@@ -192,14 +186,12 @@ class CFGDenoiser(torch.nn.Module):
         preview = self.sampler.last_latent = denoised
         sd_samplers_common.store_latent(preview)
 
-        after_cfg_callback_params = AfterCFGCallbackParams(denoised, shared.state.sampling_step, shared.state.sampling_steps)
+        after_cfg_callback_params = AfterCFGCallbackParams(denoised, self.step, self.steps)
         cfg_after_cfg_callback(after_cfg_callback_params)
         denoised = after_cfg_callback_params.x
 
         self.step += 1
 
         if self.classic_ddim_eps_estimation:
-            eps = (x - denoised) / sigma[:, None, None, None]
-            return eps
-
+            return (x - denoised) / sigma[:, None, None, None]
         return denoised.to(device=original_x_device, dtype=original_x_dtype)
