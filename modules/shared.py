@@ -2,34 +2,47 @@ import os
 import sys
 
 from modules import (
+    devices,
+    interrogate,
+    memmon,
     options,
     sd_models_types,
     shared_cmd_options,
     shared_gradio_themes,
     shared_items,
+    shared_state,
+    shared_total_tqdm,
+    styles,
     util,
 )
-from modules.paths_internal import (  # noqa: F401
+from modules.paths_internal import (  # noqa: F401; default_sd_model_file,; extensions_builtin_dir,; extensions_dir,; models_path,; script_path,; sd_configs_path,; sd_model_file,
     data_path,
-    default_sd_model_file,
-    extensions_builtin_dir,
-    extensions_dir,
-    models_path,
-    script_path,
-    sd_configs_path,
     sd_default_config,
-    sd_model_file,
 )
 
 # import gradio as gr
 
 
 cmd_opts = shared_cmd_options.cmd_opts
+eight_load_location = None if cmd_opts.lowram else "cpu"
+
+
+state = shared_state.State()
+
+styles_filename = cmd_opts.styles_file = cmd_opts.styles_file if len(cmd_opts.styles_file) > 0 else [os.path.join(data_path, "styles.csv")]
+prompt_styles = styles.StyleDatabase(styles_filename)
+
+
+interrogator = interrogate.InterrogateModels("interrogate")
+
+
+total_tqdm = shared_total_tqdm.TotalTQDM()
+
+
 parser = shared_cmd_options.parser
 
 batch_cond_uncond = True  # old field, unused now in favor of shared.opts.batch_cond_uncond
 parallel_processing_allowed = True
-styles_filename = cmd_opts.styles_file = cmd_opts.styles_file if len(cmd_opts.styles_file) > 0 else [os.path.join(data_path, "styles.csv")]
 config_filename = cmd_opts.ui_settings_file
 hide_dirs = {"visible": not cmd_opts.hide_ui_dir_config}
 
@@ -44,10 +57,6 @@ xformers_available = False
 hypernetworks = {}
 
 loaded_hypernetworks = []
-
-state = None
-
-prompt_styles = None
 
 interrogator = None
 
@@ -85,7 +94,6 @@ class Opts:
     live_previews_enable = False
     show_progress_type = "Approx NN"
     sd_unet = "Automatic"
-    sd_model_checkpoint = "AOM3B2_orangemixs.safetensors [2de0edb93e]"
     randn_source = "GPU"
     token_merging_ratio = 0.0
     token_merging_ratio_hr = 0.0
@@ -136,6 +144,10 @@ class Opts:
 
 
 opts = Opts()
+
+mem_mon = memmon.MemUsageMonitor("MemMon", devices.device, opts)
+mem_mon.start()
+
 restricted_opts = None
 
 sd_model: sd_models_types.WebuiSdModel = None
@@ -160,10 +172,6 @@ sd_upscalers = []
 clip_model = None
 
 progress_print_out = sys.stdout
-
-# gradio_theme = gr.themes.Base()
-
-total_tqdm = None
 
 mem_mon = None
 

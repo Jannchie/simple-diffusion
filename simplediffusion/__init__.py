@@ -18,7 +18,6 @@ warnings.filterwarnings("ignore", category=UserWarning)
 def main():
     with Timer("Total"):
         with Timer("Initialize"):
-            initialize()
             checkpoint_path = Path("C:/Code/webui_forge_cu121_torch21/webui/models/Stable-diffusion/AOM3B2_orangemixs.safetensors")
             checkpoint_info = modules.sd_models.CheckpointInfo(checkpoint_path)
             sd_model = modules.sd_models.load_model(checkpoint_info)
