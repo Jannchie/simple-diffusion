@@ -1,23 +1,22 @@
 from __future__ import annotations
 
 import datetime
-
-import pytz
+import hashlib
 import io
+import json
 import math
 import os
-from collections import namedtuple
 import re
+import string
+from collections import namedtuple
 
 import numpy as np
 import piexif
 import piexif.helper
-from PIL import Image, ImageFont, ImageDraw, ImageColor, PngImagePlugin
-import string
-import json
-import hashlib
+import pytz
+from PIL import Image, ImageColor, ImageDraw, ImageFont, PngImagePlugin
 
-from modules import sd_samplers, shared, script_callbacks, errors
+from modules import errors, script_callbacks, sd_samplers, shared
 from modules.paths_internal import roboto_ttf_file
 from modules.shared import opts
 
@@ -558,7 +557,11 @@ def save_image_with_geninfo(image, geninfo, filename, extension=None, existing_p
         image.save(filename, format=image_format, quality=opts.jpeg_quality, lossless=opts.webp_lossless)
 
         if opts.enable_pnginfo and geninfo is not None:
-            exif_bytes = piexif.dump({"Exif": {piexif.ExifIFD.UserComment: piexif.helper.UserComment.dump(geninfo or "", encoding="unicode")},})
+            exif_bytes = piexif.dump(
+                {
+                    "Exif": {piexif.ExifIFD.UserComment: piexif.helper.UserComment.dump(geninfo or "", encoding="unicode")},
+                }
+            )
 
             piexif.insert(exif_bytes, filename)
     elif extension.lower() == ".gif":
@@ -611,6 +614,7 @@ def save_image(image, path, basename, seed=None, prompt=None, extension="png", i
         save_to_dirs = (grid and opts.grid_save_to_dirs) or (not grid and opts.save_to_dirs and not no_prompt)
 
     if save_to_dirs:
+        # If save_to_dirs is enabled, the filename pattern will be used to create a subdirectory
         dirname = namegen.apply(opts.directories_filename_pattern or "[prompt_words]").lstrip(" ").rstrip("\\ /")
         path = os.path.join(path, dirname)
 

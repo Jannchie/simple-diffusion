@@ -1,6 +1,8 @@
-from modules.sd_hijack_clip import FrozenCLIPEmbedderWithCustomWords
+import logging
+
 from ldm_patched.modules import model_management
 from modules import sd_models
+from modules.sd_hijack_clip import FrozenCLIPEmbedderWithCustomWords
 from modules.shared import opts
 
 
@@ -8,9 +10,8 @@ def move_clip_to_gpu():
     if sd_models.model_data.sd_model is None:
         print("Error: CLIP called before SD is loaded!")
         return
-
+    logging.info("Moving CLIP to GPU.")
     model_management.load_model_gpu(sd_models.model_data.sd_model.forge_objects.clip.patcher)
-    return
 
 
 class CLIP_SD_15_L(FrozenCLIPEmbedderWithCustomWords):
@@ -19,13 +20,11 @@ class CLIP_SD_15_L(FrozenCLIPEmbedderWithCustomWords):
         self.wrapped.transformer.text_model.embeddings.to(tokens.device)
         outputs = self.wrapped.transformer(input_ids=tokens, output_hidden_states=-opts.CLIP_stop_at_last_layers)
 
-        if opts.CLIP_stop_at_last_layers > 1:
-            z = outputs.hidden_states[-opts.CLIP_stop_at_last_layers]
-            z = self.wrapped.transformer.text_model.final_layer_norm(z)
-        else:
-            z = outputs.last_hidden_state
+        if opts.CLIP_stop_at_last_layers <= 1:
+            return outputs.last_hidden_state
 
-        return z
+        z = outputs.hidden_states[-opts.CLIP_stop_at_last_layers]
+        return self.wrapped.transformer.text_model.final_layer_norm(z)
 
 
 class CLIP_SD_21_H(FrozenCLIPEmbedderWithCustomWords):
@@ -46,12 +45,9 @@ class CLIP_SD_21_H(FrozenCLIPEmbedderWithCustomWords):
         outputs = self.wrapped.transformer(tokens, output_hidden_states=self.wrapped.layer == "hidden")
 
         if self.wrapped.layer == "last":
-            z = outputs.last_hidden_state
-        else:
-            z = outputs.hidden_states[self.wrapped.layer_idx]
-            z = self.wrapped.transformer.text_model.final_layer_norm(z)
-
-        return z
+            return outputs.last_hidden_state
+        z = outputs.hidden_states[self.wrapped.layer_idx]
+        return self.wrapped.transformer.text_model.final_layer_norm(z)
 
 
 class CLIP_SD_XL_L(FrozenCLIPEmbedderWithCustomWords):
@@ -62,12 +58,7 @@ class CLIP_SD_XL_L(FrozenCLIPEmbedderWithCustomWords):
         self.wrapped.transformer.text_model.embeddings.to(tokens.device)
         outputs = self.wrapped.transformer(tokens, output_hidden_states=self.wrapped.layer == "hidden")
 
-        if self.wrapped.layer == "last":
-            z = outputs.last_hidden_state
-        else:
-            z = outputs.hidden_states[self.wrapped.layer_idx]
-
-        return z
+        return outputs.last_hidden_state if self.wrapped.layer == "last" else outputs.hidden_states[self.wrapped.layer_idx]
 
 
 class CLIP_SD_XL_G(FrozenCLIPEmbedderWithCustomWords):

@@ -1,10 +1,12 @@
 # pytorch_diffusion + derived encoder decoder
+import logging
 import math
+from typing import Any, Optional
+
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 from einops import rearrange
-from typing import Optional, Any
 
 from ldm.modules.attention import MemoryEfficientCrossAttention
 
@@ -15,7 +17,6 @@ try:
     XFORMERS_IS_AVAILBLE = True
 except:
     XFORMERS_IS_AVAILBLE = False
-    print("No module 'xformers'. Proceeding without it.")
 
 
 def get_timestep_embedding(timesteps, embedding_dim):
@@ -164,9 +165,9 @@ class AttnBlock(nn.Module):
 
 class MemoryEfficientAttnBlock(nn.Module):
     """
-        Uses xformers efficient implementation,
-        see https://github.com/MatthieuTPHR/diffusers/blob/d80b531ff8060ec1ea982b65a1b8df70f73aa67c/src/diffusers/models/attention.py#L223
-        Note: this is a single-head self-attention operation
+    Uses xformers efficient implementation,
+    see https://github.com/MatthieuTPHR/diffusers/blob/d80b531ff8060ec1ea982b65a1b8df70f73aa67c/src/diffusers/models/attention.py#L223
+    Note: this is a single-head self-attention operation
     """
 
     #
@@ -192,7 +193,10 @@ class MemoryEfficientAttnBlock(nn.Module):
         B, C, H, W = q.shape
         q, k, v = map(lambda x: rearrange(x, "b c h w -> b (h w) c"), (q, k, v))
 
-        q, k, v = map(lambda t: t.unsqueeze(3).reshape(B, t.shape[1], 1, C).permute(0, 2, 1, 3).reshape(B * 1, t.shape[1], C).contiguous(), (q, k, v),)
+        q, k, v = map(
+            lambda t: t.unsqueeze(3).reshape(B, t.shape[1], 1, C).permute(0, 2, 1, 3).reshape(B * 1, t.shape[1], C).contiguous(),
+            (q, k, v),
+        )
         out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=None, op=self.attention_op)
 
         out = out.unsqueeze(0).reshape(B, 1, out.shape[1], C).permute(0, 2, 1, 3).reshape(B, out.shape[1], C)
@@ -246,7 +250,12 @@ class Model(nn.Module):
         if self.use_timestep:
             # timestep embedding
             self.temb = nn.Module()
-            self.temb.dense = nn.ModuleList([torch.nn.Linear(self.ch, self.temb_ch), torch.nn.Linear(self.temb_ch, self.temb_ch),])
+            self.temb.dense = nn.ModuleList(
+                [
+                    torch.nn.Linear(self.ch, self.temb_ch),
+                    torch.nn.Linear(self.temb_ch, self.temb_ch),
+                ]
+            )
 
         # downsampling
         self.conv_in = torch.nn.Conv2d(in_channels, self.ch, kernel_size=3, stride=1, padding=1)
@@ -449,7 +458,7 @@ class Decoder(nn.Module):
         block_in = ch * ch_mult[self.num_resolutions - 1]
         curr_res = resolution // 2 ** (self.num_resolutions - 1)
         self.z_shape = (1, z_channels, curr_res, curr_res)
-        print("Working with z of shape {} = {} dimensions.".format(self.z_shape, np.prod(self.z_shape)))
+        logging.info(f"Working with z of shape {self.z_shape} = {np.prod(self.z_shape)} dimensions.")
 
         # z to block_in
         self.conv_in = torch.nn.Conv2d(z_channels, block_in, kernel_size=3, stride=1, padding=1)
@@ -599,7 +608,11 @@ class LatentRescaler(nn.Module):
         self.attn = AttnBlock(mid_channels)
         self.res_block2 = nn.ModuleList([ResnetBlock(in_channels=mid_channels, out_channels=mid_channels, temb_channels=0, dropout=0.0) for _ in range(depth)])
 
-        self.conv_out = nn.Conv2d(mid_channels, out_channels, kernel_size=1,)
+        self.conv_out = nn.Conv2d(
+            mid_channels,
+            out_channels,
+            kernel_size=1,
+        )
 
     def forward(self, x):
         x = self.conv_in(x)

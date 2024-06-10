@@ -2,15 +2,29 @@
 # 2nd edit by Forge Official
 
 
-import torch
-from ldm_patched.ldm.modules.diffusionmodules.openaimodel import UNetModel, Timestep
-from ldm_patched.ldm.modules.encoders.noise_aug_modules import CLIPEmbeddingNoiseAugmentation
-from ldm_patched.ldm.modules.diffusionmodules.upscaling import ImageConcatWithNoiseAugmentation
-import ldm_patched.ldm.modules.attention
-import ldm_patched.modules.model_management
-import ldm_patched.modules.conds
-import ldm_patched.modules.ops
+import logging
 from enum import Enum
+
+import torch
+
+import ldm_patched.ldm.modules.attention
+import ldm_patched.modules.conds
+import ldm_patched.modules.model_management
+import ldm_patched.modules.ops
+from ldm_patched.ldm.modules.diffusionmodules.openaimodel import Timestep, UNetModel
+from ldm_patched.ldm.modules.diffusionmodules.upscaling import (
+    ImageConcatWithNoiseAugmentation,
+)
+from ldm_patched.ldm.modules.encoders.noise_aug_modules import (
+    CLIPEmbeddingNoiseAugmentation,
+)
+from ldm_patched.modules.model_sampling import (
+    EPS,
+    V_PREDICTION,
+    ModelSamplingContinuousEDM,
+    ModelSamplingDiscrete,
+)
+
 from . import utils
 
 
@@ -18,9 +32,6 @@ class ModelType(Enum):
     EPS = 1
     V_PREDICTION = 2
     V_PREDICTION_EDM = 3
-
-
-from ldm_patched.modules.model_sampling import EPS, V_PREDICTION, ModelSamplingDiscrete, ModelSamplingContinuousEDM
 
 
 def model_sampling(model_config, model_type):
@@ -62,8 +73,8 @@ class BaseModel(torch.nn.Module):
         if self.adm_channels is None:
             self.adm_channels = 0
         self.inpaint_model = False
-        print("model_type", model_type.name)
-        print("UNet ADM Dimension", self.adm_channels)
+        logging.info(f"model_type:  {model_type.name}")
+        logging.info(f"UNet ADM Dimension: {self.adm_channels}")
 
     def apply_model(self, x, t, c_concat=None, c_crossattn=None, control=None, transformer_options={}, **kwargs):
         sigma = t

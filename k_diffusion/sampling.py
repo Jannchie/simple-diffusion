@@ -1,13 +1,40 @@
 import math
 
-from scipy import integrate
+import rich
 import torch
+import torchsde
+from rich.progress import (
+    BarColumn,
+    Progress,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
+from scipy import integrate
 from torch import nn
 from torchdiffeq import odeint
-import torchsde
-from tqdm.auto import trange, tqdm
+from tqdm.auto import tqdm
 
 from . import utils
+
+
+def trange(n, disable=False):
+    if disable:
+        yield from range(n)
+    console = rich.get_console()
+    with Progress(
+        TextColumn("[bold blue]{task.description}", justify="right"),
+        BarColumn(bar_width=None),
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Diffusion", total=n)
+        for i in range(n):
+            yield i
+            progress.update(task, advance=1)
 
 
 def append_zero(x):
@@ -39,7 +66,7 @@ def get_sigmas_polyexponential(n, sigma_min, sigma_max, rho=1.0, device="cpu"):
 def get_sigmas_vp(n, beta_d=19.9, beta_min=0.1, eps_s=1e-3, device="cpu"):
     """Constructs a continuous VP noise schedule."""
     t = torch.linspace(1, eps_s, n, device=device)
-    sigmas = torch.sqrt(torch.exp(beta_d * t ** 2 / 2 + beta_min * t) - 1)
+    sigmas = torch.sqrt(torch.exp(beta_d * t**2 / 2 + beta_min * t) - 1)
     return append_zero(sigmas)
 
 
@@ -53,8 +80,8 @@ def get_ancestral_step(sigma_from, sigma_to, eta=1.0):
     of noise to add (sigma_up) when doing an ancestral sampling step."""
     if not eta:
         return sigma_to, 0.0
-    sigma_up = min(sigma_to, eta * (sigma_to ** 2 * (sigma_from ** 2 - sigma_to ** 2) / sigma_from ** 2) ** 0.5)
-    sigma_down = (sigma_to ** 2 - sigma_up ** 2) ** 0.5
+    sigma_up = min(sigma_to, eta * (sigma_to**2 * (sigma_from**2 - sigma_to**2) / sigma_from**2) ** 0.5)
+    sigma_down = (sigma_to**2 - sigma_up**2) ** 0.5
     return sigma_down, sigma_up
 
 
@@ -69,7 +96,7 @@ class BatchedBrownianTree:
         t0, t1, self.sign = self.sort(t0, t1)
         w0 = kwargs.get("w0", torch.zeros_like(x))
         if seed is None:
-            seed = torch.randint(0, 2 ** 63 - 1, []).item()
+            seed = torch.randint(0, 2**63 - 1, []).item()
         self.batched = True
         try:
             assert len(seed) == x.shape[0]
@@ -120,11 +147,11 @@ def sample_euler(model, x, sigmas, extra_args=None, callback=None, disable=None,
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
     for i in trange(len(sigmas) - 1, disable=disable):
-        gamma = min(s_churn / (len(sigmas) - 1), 2 ** 0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.0
+        gamma = min(s_churn / (len(sigmas) - 1), 2**0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.0
         eps = torch.randn_like(x) * s_noise
         sigma_hat = sigmas[i] * (gamma + 1)
         if gamma > 0:
-            x = x + eps * (sigma_hat ** 2 - sigmas[i] ** 2) ** 0.5
+            x = x + eps * (sigma_hat**2 - sigmas[i] ** 2) ** 0.5
         denoised = model(x, sigma_hat * s_in, **extra_args)
         d = to_d(x, sigma_hat, denoised)
         if callback is not None:
@@ -161,11 +188,11 @@ def sample_heun(model, x, sigmas, extra_args=None, callback=None, disable=None, 
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
     for i in trange(len(sigmas) - 1, disable=disable):
-        gamma = min(s_churn / (len(sigmas) - 1), 2 ** 0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.0
+        gamma = min(s_churn / (len(sigmas) - 1), 2**0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.0
         eps = torch.randn_like(x) * s_noise
         sigma_hat = sigmas[i] * (gamma + 1)
         if gamma > 0:
-            x = x + eps * (sigma_hat ** 2 - sigmas[i] ** 2) ** 0.5
+            x = x + eps * (sigma_hat**2 - sigmas[i] ** 2) ** 0.5
         denoised = model(x, sigma_hat * s_in, **extra_args)
         d = to_d(x, sigma_hat, denoised)
         if callback is not None:
@@ -190,11 +217,11 @@ def sample_dpm_2(model, x, sigmas, extra_args=None, callback=None, disable=None,
     extra_args = {} if extra_args is None else extra_args
     s_in = x.new_ones([x.shape[0]])
     for i in trange(len(sigmas) - 1, disable=disable):
-        gamma = min(s_churn / (len(sigmas) - 1), 2 ** 0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.0
+        gamma = min(s_churn / (len(sigmas) - 1), 2**0.5 - 1) if s_tmin <= sigmas[i] <= s_tmax else 0.0
         eps = torch.randn_like(x) * s_noise
         sigma_hat = sigmas[i] * (gamma + 1)
         if gamma > 0:
-            x = x + eps * (sigma_hat ** 2 - sigmas[i] ** 2) ** 0.5
+            x = x + eps * (sigma_hat**2 - sigmas[i] ** 2) ** 0.5
         denoised = model(x, sigma_hat * s_in, **extra_args)
         d = to_d(x, sigma_hat, denoised)
         if callback is not None:

@@ -2,6 +2,7 @@
 This file contains code that is adapted from
 https://github.com/thomasjpfan/pytorch_refinenet/blob/master/pytorch_refinenet/refinenet/refinenet_4cascade.py
 """
+
 import torch
 import torch.nn as nn
 
@@ -10,8 +11,7 @@ from .blocks import FeatureFusionBlock, Interpolate, _make_encoder
 
 
 class MidasNet(BaseModel):
-    """Network for monocular depth estimation.
-    """
+    """Network for monocular depth estimation."""
 
     def __init__(self, path=None, features=256, non_negative=True):
         """Init.
@@ -25,7 +25,7 @@ class MidasNet(BaseModel):
 
         super(MidasNet, self).__init__()
 
-        use_pretrained = False if path is None else True
+        use_pretrained = path is not None
 
         self.pretrained, self.scratch = _make_encoder(backbone="resnext101_wsl", features=features, use_pretrained=use_pretrained)
 
@@ -35,7 +35,12 @@ class MidasNet(BaseModel):
         self.scratch.refinenet1 = FeatureFusionBlock(features)
 
         self.scratch.output_conv = nn.Sequential(
-            nn.Conv2d(features, 128, kernel_size=3, stride=1, padding=1), Interpolate(scale_factor=2, mode="bilinear"), nn.Conv2d(128, 32, kernel_size=3, stride=1, padding=1), nn.ReLU(True), nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0), nn.ReLU(True) if non_negative else nn.Identity(),
+            nn.Conv2d(features, 128, kernel_size=3, stride=1, padding=1),
+            Interpolate(scale_factor=2, mode="bilinear"),
+            nn.Conv2d(128, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(True),
+            nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
+            nn.ReLU(True) if non_negative else nn.Identity(),
         )
 
         if path:

@@ -1,25 +1,22 @@
 # this scripts installs necessary requirements and launches main program in webui.py
-import logging
-import re
-import subprocess
-import os
-import shutil
-import sys
-import importlib.util
 import importlib.metadata
-import platform
+import importlib.util
 import json
+import logging
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
 from functools import lru_cache
-from typing import NamedTuple
 from pathlib import Path
+from typing import NamedTuple
 
-from modules import cmd_args, errors
-from modules.paths_internal import script_path, extensions_dir, extensions_builtin_dir
+from modules import cmd_args, errors, logging_config
+from modules.paths_internal import extensions_builtin_dir, extensions_dir, script_path
 from modules.timer import startup_timer
-from modules import logging_config
-from modules_forge import forge_version
 from modules_forge.config import always_disabled_extensions
-
 
 args, _ = cmd_args.parser.parse_known_args()
 logging_config.setup_logging(args.loglevel)
@@ -90,10 +87,6 @@ def git_tag_a1111():
                 return line
         except Exception:
             return "<none>"
-
-
-def git_tag():
-    return "f" + forge_version.version + "-" + git_tag_a1111()
 
 
 def run(command, desc=None, errdesc=None, custom_env=None, live: bool = default_command_live) -> str:
@@ -334,6 +327,7 @@ def requirements_met(requirements_file):
     """
 
     import importlib.metadata
+
     import packaging.version
 
     with open(requirements_file, "r", encoding="utf8") as file:
@@ -417,11 +411,11 @@ def prepare_environment():
     startup_timer.record("checks")
 
     commit = commit_hash()
-    tag = git_tag()
+    # tag = git_tag()
     startup_timer.record("git version info")
 
     print(f"Python {sys.version}")
-    print(f"Version: {tag}")
+    # print(f"Version: {tag}")
     print(f"Commit hash: {commit}")
 
     if args.reinstall_torch or not is_installed("torch") or not is_installed("torchvision"):
@@ -552,8 +546,9 @@ def start():
 
 
 def dump_sysinfo():
-    from modules import sysinfo
     import datetime
+
+    from modules import sysinfo
 
     text = sysinfo.get()
     filename = f"sysinfo-{datetime.datetime.utcnow().strftime('%Y-%m-%d-%H-%M')}.json"

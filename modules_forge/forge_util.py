@@ -1,12 +1,16 @@
-import torch
-import numpy as np
 import os
-import time
 import random
 import string
+import time
+
 import cv2
+import numpy as np
+import rich
+import torch
 
 from ldm_patched.modules import model_management
+
+console = rich.get_console()
 
 
 def prepare_free_memory(aggressive=False):
@@ -21,10 +25,22 @@ def prepare_free_memory(aggressive=False):
 
 
 def apply_circular_forge(model, tiling_enabled=False):
+    """
+    Applies circular padding to all Conv layers in the model.
+
+    if tiling_enabled is True, then circular padding is applied.
+
+    Args:
+        model: torch.nn.Module
+        tiling_enabled: bool
+
+    """
     if model.tiling_enabled == tiling_enabled:
         return
-
-    print(f"Tiling: {tiling_enabled}")
+    if tiling_enabled:
+        console.log("Applying circular padding to all Conv layers in the model.")
+    else:
+        console.log("Applying zero padding to all Conv layers in the model.")
     model.tiling_enabled = tiling_enabled
 
     def flatten(el):
@@ -100,7 +116,8 @@ def write_images_to_mp4(frame_list: list, filename=None, fps=6):
         from launch import run_pip
 
         run_pip(
-            "install imageio[pyav]", "imageio[pyav]",
+            "install imageio[pyav]",
+            "imageio[pyav]",
         )
         import av
 

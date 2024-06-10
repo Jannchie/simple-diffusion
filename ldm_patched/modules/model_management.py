@@ -2,6 +2,8 @@
 # 2nd edit by Forge Official
 
 
+import contextlib
+import logging
 import sys
 import time
 from enum import Enum
@@ -124,19 +126,15 @@ def get_total_memory(dev=None, torch_total_too=False):
             mem_total_torch = mem_reserved
             mem_total = mem_total_cuda
 
-    if torch_total_too:
-        return (mem_total, mem_total_torch)
-    else:
-        return mem_total
+    return (mem_total, mem_total_torch) if torch_total_too else mem_total
 
 
 total_vram = get_total_memory(get_torch_device()) / (1024 * 1024)
 total_ram = psutil.virtual_memory().total / (1024 * 1024)
-print("Total VRAM {:0.0f} MB, total RAM {:0.0f} MB".format(total_vram, total_ram))
-if not args.always_normal_vram and not args.always_cpu:
-    if lowvram_available and total_vram <= 4096:
-        print("Trying to enable lowvram mode because your GPU seems to have 4GB or less. If you don't want this use: --always-normal-vram")
-        set_vram_to = VRAMState.LOW_VRAM
+logging.info("Total VRAM {:0.0f} MB, total RAM {:0.0f} MB".format(total_vram, total_ram))
+if not args.always_normal_vram and not args.always_cpu and (lowvram_available and total_vram <= 4096):
+    print("Trying to enable lowvram mode because your GPU seems to have 4GB or less. If you don't want this use: --always-normal-vram")
+    set_vram_to = VRAMState.LOW_VRAM
 
 try:
     OOM_EXCEPTION = torch.cuda.OutOfMemoryError
@@ -244,9 +242,8 @@ if args.all_in_fp16:
     print("Forcing FP16.")
     FORCE_FP16 = True
 
-if lowvram_available:
-    if set_vram_to in (VRAMState.LOW_VRAM, VRAMState.NO_VRAM):
-        vram_state = set_vram_to
+if lowvram_available and set_vram_to in (VRAMState.LOW_VRAM, VRAMState.NO_VRAM):
+    vram_state = set_vram_to
 
 
 if cpu_state != CPUState.GPU:
@@ -255,7 +252,7 @@ if cpu_state != CPUState.GPU:
 if cpu_state == CPUState.MPS:
     vram_state = VRAMState.SHARED
 
-print(f"Set vram state to: {vram_state.name}")
+logging.info(f"Set vram state to: {vram_state.name}")
 
 ALWAYS_VRAM_OFFLOAD = args.always_offload_from_vram
 
@@ -270,36 +267,35 @@ if PIN_SHARED_MEMORY:
 
 def get_torch_device_name(device):
     if hasattr(device, "type"):
-        if device.type == "cuda":
-            try:
-                allocator_backend = torch.cuda.get_allocator_backend()
-            except:
-                allocator_backend = ""
-            return "{} {} : {}".format(device, torch.cuda.get_device_name(device), allocator_backend)
-        else:
-            return "{}".format(device.type)
+        if device.type != "cuda":
+            return f"{device.type}"
+        try:
+            allocator_backend = torch.cuda.get_allocator_backend()
+        except Exception:
+            allocator_backend = ""
+        return f"{device} {torch.cuda.get_device_name(device)} : {allocator_backend}"
     elif is_intel_xpu():
-        return "{} {}".format(device, torch.xpu.get_device_name(device))
+        return f"{device} {torch.xpu.get_device_name(device)}"
     else:
-        return "CUDA {}: {}".format(device, torch.cuda.get_device_name(device))
+        return f"CUDA {device}: {torch.cuda.get_device_name(device)}"
 
 
 try:
     torch_device_name = get_torch_device_name(get_torch_device())
-    print("Device:", torch_device_name)
-except:
+    logging.info("Device:", torch_device_name)
+except Exception:
     torch_device_name = ""
-    print("Could not pick default device.")
+    logging.info("Could not pick default device.")
 
 if "rtx" in torch_device_name.lower():
     if not args.pin_shared_memory:
-        print("Hint: your device supports --pin-shared-memory for potential speed improvements.")
+        logging.info("Hint: your device supports --pin-shared-memory for potential speed improvements.")
     if not args.cuda_malloc:
-        print("Hint: your device supports --cuda-malloc for potential speed improvements.")
+        logging.info("Hint: your device supports --cuda-malloc for potential speed improvements.")
     if not args.cuda_stream:
-        print("Hint: your device supports --cuda-stream for potential speed improvements.")
+        logging.info("Hint: your device supports --cuda-stream for potential speed improvements.")
 
-print("VAE dtype:", VAE_DTYPE)
+logging.info(f"VAE dtype: {VAE_DTYPE}")
 
 current_loaded_models = []
 
@@ -310,9 +306,8 @@ def module_size(module, exclude_device=None):
     for k in sd:
         t = sd[k]
 
-        if exclude_device is not None:
-            if t.device == exclude_device:
-                continue
+        if exclude_device is not None and t.device == exclude_device:
+            continue
 
         module_mem += t.nelement() * t.element_size()
     return module_mem
@@ -420,24 +415,21 @@ def free_memory(memory_required, device, keep_loaded=[]):
     offload_everything = ALWAYS_VRAM_OFFLOAD or vram_state == VRAMState.NO_VRAM
     unloaded_model = False
     for i in range(len(current_loaded_models) - 1, -1, -1):
-        if not offload_everything:
-            if get_free_memory(device) > memory_required:
-                break
+        if not offload_everything and get_free_memory(device) > memory_required:
+            break
         shift_model = current_loaded_models[i]
-        if shift_model.device == device:
-            if shift_model not in keep_loaded:
-                m = current_loaded_models.pop(i)
-                m.model_unload()
-                del m
-                unloaded_model = True
+        if shift_model.device == device and shift_model not in keep_loaded:
+            m = current_loaded_models.pop(i)
+            m.model_unload()
+            del m
+            unloaded_model = True
 
     if unloaded_model:
         soft_empty_cache()
-    else:
-        if vram_state != VRAMState.HIGH_VRAM:
-            mem_free_total, mem_free_torch = get_free_memory(device, torch_free_too=True)
-            if mem_free_torch > mem_free_total * 0.25:
-                soft_empty_cache()
+    elif vram_state != VRAMState.HIGH_VRAM:
+        mem_free_total, mem_free_torch = get_free_memory(device, torch_free_too=True)
+        if mem_free_torch > mem_free_total * 0.25:
+            soft_empty_cache()
 
 
 def load_models_gpu(models, memory_required=0):
@@ -457,10 +449,10 @@ def load_models_gpu(models, memory_required=0):
             models_already_loaded.append(loaded_model)
         else:
             if hasattr(x, "model"):
-                print(f"To load target model {x.model.__class__.__name__}")
+                logging.info(f"To load target model {x.model.__class__.__name__}")
             models_to_load.append(loaded_model)
 
-    if len(models_to_load) == 0:
+    if not models_to_load:
         devs = set(map(lambda a: a.device, models_already_loaded))
         for d in devs:
             if d != torch.device("cpu"):
@@ -468,41 +460,40 @@ def load_models_gpu(models, memory_required=0):
 
         moving_time = time.perf_counter() - execution_start_time
         if moving_time > 0.1:
-            print(f"Memory cleanup has taken {moving_time:.2f} seconds")
+            logging.info(f"Memory cleanup has taken {moving_time:.2f} seconds")
 
         return
 
-    print(f"Begin to load {len(models_to_load)} model{'s' if len(models_to_load) > 1 else ''}")
+    logging.info(f"Begin to load {len(models_to_load)} model{'s' if len(models_to_load) > 1 else ''}")
 
     total_memory_required = {}
     for loaded_model in models_to_load:
         unload_model_clones(loaded_model.model)
         total_memory_required[loaded_model.device] = total_memory_required.get(loaded_model.device, 0) + loaded_model.model_memory_required(loaded_model.device)
 
-    for device in total_memory_required:
+    for device, value in total_memory_required.items():
         if device != torch.device("cpu"):
-            free_memory(total_memory_required[device] * 1.3 + extra_mem, device, models_already_loaded)
+            free_memory(value * 1.3 + extra_mem, device, models_already_loaded)
 
     for loaded_model in models_to_load:
         model = loaded_model.model
         torch_dev = model.load_device
-        if is_device_cpu(torch_dev):
-            vram_set_state = VRAMState.DISABLED
-        else:
-            vram_set_state = vram_state
-
+        vram_set_state = VRAMState.DISABLED if is_device_cpu(torch_dev) else vram_state
         async_kept_memory = -1
 
-        if lowvram_available and (vram_set_state == VRAMState.LOW_VRAM or vram_set_state == VRAMState.NORMAL_VRAM):
+        if lowvram_available and vram_set_state in [
+            VRAMState.LOW_VRAM,
+            VRAMState.NORMAL_VRAM,
+        ]:
             model_memory = loaded_model.model_memory_required(torch_dev)
             current_free_mem = get_free_memory(torch_dev)
             minimal_inference_memory = minimum_inference_memory()
             estimated_remaining_memory = current_free_mem - model_memory - minimal_inference_memory
 
-            print("[Memory Management] Current Free GPU Memory (MB) = ", current_free_mem / (1024 * 1024))
-            print("[Memory Management] Model Memory (MB) = ", model_memory / (1024 * 1024))
-            print("[Memory Management] Minimal Inference Memory (MB) = ", minimal_inference_memory / (1024 * 1024))
-            print("[Memory Management] Estimated Remaining GPU Memory (MB) = ", estimated_remaining_memory / (1024 * 1024))
+            logging.debug(f"[Memory Management] Current Free GPU Memory (MB) = {current_free_mem / (1024 * 1024):,.0f}")
+            logging.debug(f"[Memory Management] Model Memory (MB) = {model_memory / (1024 * 1024):,.0f}")
+            logging.debug(f"[Memory Management] Minimal Inference Memory (MB) = {minimal_inference_memory / (1024 * 1024):,.0f}")
+            logging.debug(f"[Memory Management] Estimated Remaining GPU Memory (MB) = {estimated_remaining_memory / (1024 * 1024):,.0f}")
 
             if estimated_remaining_memory < 0:
                 vram_set_state = VRAMState.LOW_VRAM
@@ -516,7 +507,7 @@ def load_models_gpu(models, memory_required=0):
         current_loaded_models.insert(0, loaded_model)
 
     moving_time = time.perf_counter() - execution_start_time
-    print(f"Moving model(s) has taken {moving_time:.2f} seconds")
+    logging.info(f"Moving model(s) has taken {moving_time:.2f} seconds")
 
     return
 
@@ -539,15 +530,13 @@ def cleanup_models():
 
 def dtype_size(dtype):
     dtype_size = 4
-    if dtype == torch.float16 or dtype == torch.bfloat16:
+    if dtype in [torch.float16, torch.bfloat16]:
         dtype_size = 2
     elif dtype == torch.float32:
         dtype_size = 4
     else:
-        try:
+        with contextlib.suppress(Exception):
             dtype_size = dtype.itemsize
-        except:  # Old pytorch doesn't have .itemsize
-            pass
     return dtype_size
 
 
@@ -571,10 +560,7 @@ def unet_inital_load_device(parameters, dtype):
 
     mem_dev = get_free_memory(torch_dev)
     mem_cpu = get_free_memory(cpu_dev)
-    if mem_dev > mem_cpu and model_size < mem_dev:
-        return torch_dev
-    else:
-        return cpu_dev
+    return torch_dev if mem_dev > mem_cpu and model_size < mem_dev else cpu_dev
 
 
 def unet_dtype(device=None, model_params=0):

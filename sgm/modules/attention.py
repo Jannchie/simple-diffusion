@@ -33,7 +33,6 @@ try:
     XFORMERS_IS_AVAILABLE = True
 except:
     XFORMERS_IS_AVAILABLE = False
-    print("no module 'xformers'. Processing without...")
 
 from .diffusionmodules.util import checkpoint
 

@@ -12,6 +12,7 @@ from typing import Any
 
 import cv2
 import numpy as np
+import rich
 import torch
 from blendmodes.blend import BlendType, blendLayers
 from einops import rearrange, repeat
@@ -54,6 +55,7 @@ from modules.sd_samplers_common import (
 from modules.shared import cmd_opts, opts, state
 from modules_forge.forge_util import apply_circular_forge
 
+console = rich.get_console()
 # some of those options should not be changed at all because they would break the model, so I removed them from options.
 opt_C = 4
 opt_f = 8
@@ -233,10 +235,10 @@ class StableDiffusionProcessing:
 
     user: str = field(default=None, init=False)
 
-    sd_model_name: str = field(default=None, init=False)
-    sd_model_hash: str = field(default=None, init=False)
-    sd_vae_name: str = field(default=None, init=False)
-    sd_vae_hash: str = field(default=None, init=False)
+    # sd_model_name: str = field(default=None, init=False)
+    # sd_model_hash: str = field(default=None, init=False)
+    # sd_vae_name: str = field(default=None, init=False)
+    # sd_vae_hash: str = field(default=None, init=False)
 
     is_api: bool = field(default=False, init=False)
 
@@ -325,7 +327,12 @@ class StableDiffusionProcessing:
         midas_in = repeat(midas_in, "1 ... -> n ...", n=self.batch_size)
 
         conditioning_image = images_tensor_to_samples(source_image * 0.5 + 0.5, approximation_indexes.get(opts.sd_vae_encode_method))
-        conditioning = torch.nn.functional.interpolate(self.sd_model.depth_model(midas_in), size=conditioning_image.shape[2:], mode="bicubic", align_corners=False,)
+        conditioning = torch.nn.functional.interpolate(
+            self.sd_model.depth_model(midas_in),
+            size=conditioning_image.shape[2:],
+            mode="bicubic",
+            align_corners=False,
+        )
 
         (depth_min, depth_max) = torch.aminmax(conditioning)
         conditioning = 2.0 * (conditioning - depth_min) / (depth_max - depth_min) - 1.0
@@ -543,10 +550,10 @@ class Processed:
         self.batch_size = p.batch_size
         self.restore_faces = p.restore_faces
         self.face_restoration_model = opts.face_restoration_model if p.restore_faces else None
-        self.sd_model_name = p.sd_model_name
-        self.sd_model_hash = p.sd_model_hash
-        self.sd_vae_name = p.sd_vae_name
-        self.sd_vae_hash = p.sd_vae_hash
+        # self.sd_model_name = p.sd_model_name
+        # self.sd_model_hash = p.sd_model_hash
+        # self.sd_vae_name = p.sd_vae_name
+        # self.sd_vae_hash = p.sd_vae_hash
         self.seed_resize_from_w = p.seed_resize_from_w
         self.seed_resize_from_h = p.seed_resize_from_h
         self.denoising_strength = getattr(p, "denoising_strength", None)
@@ -664,13 +671,11 @@ def fix_seed(p):
 
 
 def program_version():
-    import launch
+    # import launch
 
-    res = launch.git_tag()
-    if res == "<none>":
-        res = None
-
-    return res
+    # res = launch.git_tag()
+    # read pyproject.toml
+    return None
 
 
 def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iteration=0, position_in_batch=0, use_main_prompt=False, index=None, all_negative_prompts=None):
@@ -697,12 +702,12 @@ def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iter
         "Seed": p.all_seeds[0] if use_main_prompt else all_seeds[index],
         "Face restoration": opts.face_restoration_model if p.restore_faces else None,
         "Size": f"{p.width}x{p.height}",
-        "Model hash": p.sd_model_hash if opts.add_model_hash_to_info else None,
-        "Model": p.sd_model_name if opts.add_model_name_to_info else None,
+        # "Model hash": p.sd_model_hash if opts.add_model_hash_to_info else None,
+        # "Model": p.sd_model_name if opts.add_model_name_to_info else None,
         "FP8 weight": opts.fp8_storage if devices.fp8 else None,
         "Cache FP16 weight for LoRA": opts.cache_fp16_weight if devices.fp8 else None,
-        "VAE hash": p.sd_vae_hash if opts.add_vae_hash_to_info else None,
-        "VAE": p.sd_vae_name if opts.add_vae_name_to_info else None,
+        # "VAE hash": p.sd_vae_hash if opts.add_vae_hash_to_info else None,
+        # "VAE": p.sd_vae_name if opts.add_vae_name_to_info else None,
         "Variation seed": (None if p.subseed_strength == 0 else (p.all_subseeds[0] if use_main_prompt else all_subseeds[index])),
         "Variation seed strength": (None if p.subseed_strength == 0 else p.subseed_strength),
         "Seed resize from": (None if p.seed_resize_from_w <= 0 or p.seed_resize_from_h <= 0 else f"{p.seed_resize_from_w}x{p.seed_resize_from_h}"),
@@ -789,11 +794,10 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
         if p.refiner_checkpoint_info is None:
             raise Exception(f"Could not find checkpoint with name {p.refiner_checkpoint}")
 
-    p.sd_model_name = shared.sd_model.sd_checkpoint_info.name_for_extra
-    p.sd_model_hash = shared.sd_model.sd_model_hash
-    p.sd_vae_name = sd_vae.get_loaded_vae_name()
-    p.sd_vae_hash = sd_vae.get_loaded_vae_hash()
-
+    # p.sd_model_name = shared.sd_model.sd_checkpoint_info.name_for_extra
+    # p.sd_model_hash = shared.sd_model.sd_model_hash
+    # p.sd_vae_name = sd_vae.get_loaded_vae_name()
+    # p.sd_vae_hash = sd_vae.get_loaded_vae_hash()
     apply_circular_forge(p.sd_model, p.tiling)
     modules.sd_hijack.model_hijack.clear_comments()
 
@@ -898,7 +902,7 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
                 alphas_bar_sqrt *= alphas_bar_sqrt_0 / (alphas_bar_sqrt_0 - alphas_bar_sqrt_T)
 
                 # Convert alphas_bar_sqrt to betas
-                alphas_bar = alphas_bar_sqrt ** 2  # Revert sqrt
+                alphas_bar = alphas_bar_sqrt**2  # Revert sqrt
                 alphas_bar[-1] = 4.8973451890853435e-08
                 return alphas_bar
 
@@ -1069,7 +1073,16 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
 
     devices.torch_gc()
 
-    res = Processed(p, images_list=output_images, seed=p.all_seeds[0], info=infotexts[0], subseed=p.all_subseeds[0], index_of_first_image=index_of_first_image, infotexts=infotexts, extra_images_list=p.extra_result_images,)
+    res = Processed(
+        p,
+        images_list=output_images,
+        seed=p.all_seeds[0],
+        info=infotexts[0],
+        subseed=p.all_subseeds[0],
+        index_of_first_image=index_of_first_image,
+        infotexts=infotexts,
+        extra_images_list=p.extra_result_images,
+    )
 
     if p.scripts is not None:
         p.scripts.postprocess(p, res)

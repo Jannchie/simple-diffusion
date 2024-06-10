@@ -1,35 +1,33 @@
 # Taken from https://github.com/comfyanonymous/ComfyUI
-# This file is only for reference, and not used in the backend or runtime.
 
+import logging
 
 import torch
-
-from ldm_patched.modules import model_management
-from ldm_patched.ldm.models.autoencoder import AutoencoderKL, AutoencodingEngine
 import yaml
 
-import ldm_patched.modules.utils
-
-from . import clip_vision
-from . import gligen
-from . import diffusers_convert
-from . import model_base
-from . import model_detection
-
-from . import sd1_clip
-from . import sd2_clip
-from . import sdxl_clip
-
-import ldm_patched.modules.model_patcher
 import ldm_patched.modules.lora
-import ldm_patched.t2ia.adapter
+import ldm_patched.modules.model_patcher
 import ldm_patched.modules.supported_models_base
+import ldm_patched.modules.utils
+import ldm_patched.t2ia.adapter
 import ldm_patched.taesd.taesd
+from ldm_patched.ldm.models.autoencoder import AutoencoderKL, AutoencodingEngine
+from ldm_patched.modules import model_management
+
+from . import (
+    clip_vision,
+    diffusers_convert,
+    gligen,
+    model_base,
+    model_detection,
+    sd1_clip,
+    sd2_clip,
+    sdxl_clip,
+)
 
 
 def load_model_weights(model, sd):
     m, u = model.load_state_dict(sd, strict=False)
-    m = set(m)
     unexpected_keys = set(u)
 
     k = list(sd.keys())
@@ -37,8 +35,8 @@ def load_model_weights(model, sd):
         if x not in unexpected_keys:
             w = sd.pop(x)
             del w
-    if len(m) > 0:
-        print("extra", m)
+    if m := set(m):
+        logging.info("extra: {m}")
     return model
 
 
@@ -69,11 +67,11 @@ def load_lora_for_models(model, clip, lora, strength_model, strength_clip, filen
     lora_clip, lora_unmatch = ldm_patched.modules.lora.load_lora(lora_unmatch, clip_keys)
 
     if len(lora_unmatch) > 12:
-        print(f"[LORA] LoRA version mismatch for {model_flag}: {filename}")
+        logging.info(f"[LORA] LoRA version mismatch for {model_flag}: {filename}")
         return model, clip
 
     if len(lora_unmatch) > 0:
-        print(f"[LORA] Loading {filename} for {model_flag} with unmatched keys {list(lora_unmatch.keys())}")
+        logging.info(f"[LORA] Loading {filename} for {model_flag} with unmatched keys {list(lora_unmatch.keys())}")
 
     new_model = model.clone() if model is not None else None
     new_clip = clip.clone() if clip is not None else None
@@ -82,18 +80,18 @@ def load_lora_for_models(model, clip, lora, strength_model, strength_clip, filen
         loaded_keys = new_model.add_patches(lora_unet, strength_model)
         skipped_keys = [item for item in lora_unet if item not in loaded_keys]
         if len(skipped_keys) > 12:
-            print(f"[LORA] Mismatch {filename} for {model_flag}-UNet with {len(skipped_keys)} keys mismatched in {len(loaded_keys)} keys")
+            logging.info(f"[LORA] Mismatch {filename} for {model_flag}-UNet with {len(skipped_keys)} keys mismatched in {len(loaded_keys)} keys")
         else:
-            print(f"[LORA] Loaded {filename} for {model_flag}-UNet with {len(loaded_keys)} keys at weight {strength_model} (skipped {len(skipped_keys)} keys)")
+            logging.info(f"[LORA] Loaded {filename} for {model_flag}-UNet with {len(loaded_keys)} keys at weight {strength_model} (skipped {len(skipped_keys)} keys)")
             model = new_model
 
     if new_clip is not None and len(lora_clip) > 0:
         loaded_keys = new_clip.add_patches(lora_clip, strength_clip)
         skipped_keys = [item for item in lora_clip if item not in loaded_keys]
         if len(skipped_keys) > 12:
-            print(f"[LORA] Mismatch {filename} for {model_flag}-CLIP with {len(skipped_keys)} keys mismatched in {len(loaded_keys)} keys")
+            logging.info(f"[LORA] Mismatch {filename} for {model_flag}-CLIP with {len(skipped_keys)} keys mismatched in {len(loaded_keys)} keys")
         else:
-            print(f"[LORA] Loaded {filename} for {model_flag}-CLIP with {len(loaded_keys)} keys at weight {strength_clip} (skipped {len(skipped_keys)} keys)")
+            logging.info(f"[LORA] Loaded {filename} for {model_flag}-CLIP with {len(loaded_keys)} keys at weight {strength_clip} (skipped {len(skipped_keys)} keys)")
             clip = new_clip
 
     return model, clip
@@ -143,9 +141,7 @@ class CLIP:
 
         self.load_model()
         cond, pooled = self.cond_stage_model.encode_token_weights(tokens)
-        if return_pooled:
-            return cond, pooled
-        return cond
+        return (cond, pooled) if return_pooled else cond
 
     def encode(self, text):
         tokens = self.tokenize(text)
@@ -206,10 +202,10 @@ class VAE:
 
         m, u = self.first_stage_model.load_state_dict(sd, strict=False)
         if len(m) > 0:
-            print("Missing VAE keys", m)
+            logging.info(f"Missing VAE keys: {m}")
 
         if len(u) > 0:
-            print("Leftover VAE keys", u)
+            logging.info(f"Leftover VAE keys: {u}")
 
         if device is None:
             device = model_management.vae_device()
@@ -243,12 +239,39 @@ class VAE:
         pbar = ldm_patched.modules.utils.ProgressBar(steps, title="VAE tiled decode")
 
         decode_fn = lambda a: (self.first_stage_model.decode(a.to(self.vae_dtype).to(self.device)) + 1.0).float()
-        output = torch.clamp(
+        return torch.clamp(
             (
                 (
-                    ldm_patched.modules.utils.tiled_scale(samples, decode_fn, tile_x // 2, tile_y * 2, overlap, upscale_amount=self.downscale_ratio, output_device=self.output_device, pbar=pbar)
-                    + ldm_patched.modules.utils.tiled_scale(samples, decode_fn, tile_x * 2, tile_y // 2, overlap, upscale_amount=self.downscale_ratio, output_device=self.output_device, pbar=pbar)
-                    + ldm_patched.modules.utils.tiled_scale(samples, decode_fn, tile_x, tile_y, overlap, upscale_amount=self.downscale_ratio, output_device=self.output_device, pbar=pbar)
+                    ldm_patched.modules.utils.tiled_scale(
+                        samples,
+                        decode_fn,
+                        tile_x // 2,
+                        tile_y * 2,
+                        overlap,
+                        upscale_amount=self.downscale_ratio,
+                        output_device=self.output_device,
+                        pbar=pbar,
+                    )
+                    + ldm_patched.modules.utils.tiled_scale(
+                        samples,
+                        decode_fn,
+                        tile_x * 2,
+                        tile_y // 2,
+                        overlap,
+                        upscale_amount=self.downscale_ratio,
+                        output_device=self.output_device,
+                        pbar=pbar,
+                    )
+                    + ldm_patched.modules.utils.tiled_scale(
+                        samples,
+                        decode_fn,
+                        tile_x,
+                        tile_y,
+                        overlap,
+                        upscale_amount=self.downscale_ratio,
+                        output_device=self.output_device,
+                        pbar=pbar,
+                    )
                 )
                 / 3.0
             )
@@ -256,7 +279,6 @@ class VAE:
             min=0.0,
             max=1.0,
         )
-        return output
 
     def encode_tiled_(self, pixel_samples, tile_x=512, tile_y=512, overlap=64):
         steps = pixel_samples.shape[0] * ldm_patched.modules.utils.get_tiled_scale_steps(pixel_samples.shape[3], pixel_samples.shape[2], tile_x, tile_y, overlap)
@@ -322,7 +344,7 @@ class VAE:
                 samples[x : x + batch_number] = self.first_stage_model.encode(pixels_in).to(self.output_device).float()
 
         except model_management.OOM_EXCEPTION as e:
-            print("Warning: Ran out of memory when regular VAE encoding, retrying with tiled VAE encoding.")
+            logging.warning("Ran out of memory when regular VAE encoding, retrying with tiled VAE encoding.")
             samples = self.encode_tiled_(pixel_samples)
 
         return samples
@@ -337,8 +359,7 @@ class VAE:
     def encode_tiled(self, pixel_samples, tile_x=512, tile_y=512, overlap=64):
         model_management.load_model_gpu(self.patcher)
         pixel_samples = pixel_samples.movedim(-1, 1)
-        samples = self.encode_tiled_(pixel_samples, tile_x=tile_x, tile_y=tile_y, overlap=overlap)
-        return samples
+        return self.encode_tiled_(pixel_samples, tile_x=tile_x, tile_y=tile_y, overlap=overlap)
 
     def get_sd(self):
         return self.first_stage_model.state_dict()
@@ -358,15 +379,13 @@ def load_style_model(ckpt_path):
     if "style_embedding" in keys:
         model = ldm_patched.t2ia.adapter.StyleAdapter(width=1024, context_dim=768, num_head=8, n_layes=3, num_token=8)
     else:
-        raise Exception("invalid style model {}".format(ckpt_path))
+        raise Exception(f"invalid style model {ckpt_path}")
     model.load_state_dict(model_data)
     return StyleModel(model)
 
 
 def load_clip(ckpt_paths, embedding_directory=None):
-    clip_data = []
-    for p in ckpt_paths:
-        clip_data.append(ldm_patched.modules.utils.load_torch_file(p, safe_load=True))
+    clip_data = [ldm_patched.modules.utils.load_torch_file(p, safe_load=True) for p in ckpt_paths]
 
     class EmptyClass:
         pass
@@ -421,13 +440,12 @@ def load_checkpoint(config_path=None, ckpt_path=None, output_vae=True, output_cl
     vae_config = model_config_params["first_stage_config"]
 
     fp16 = False
-    if "unet_config" in model_config_params:
-        if "params" in model_config_params["unet_config"]:
-            unet_config = model_config_params["unet_config"]["params"]
-            if "use_fp16" in unet_config:
-                fp16 = unet_config.pop("use_fp16")
-                if fp16:
-                    unet_config["dtype"] = torch.float16
+    if "unet_config" in model_config_params and "params" in model_config_params["unet_config"]:
+        unet_config = model_config_params["unet_config"]["params"]
+        if "use_fp16" in unet_config:
+            fp16 = unet_config.pop("use_fp16")
+            if fp16:
+                unet_config["dtype"] = torch.float16
 
     noise_aug_config = None
     if "noise_aug_config" in model_config_params:
@@ -435,9 +453,8 @@ def load_checkpoint(config_path=None, ckpt_path=None, output_vae=True, output_cl
 
     model_type = model_base.ModelType.EPS
 
-    if "parameterization" in model_config_params:
-        if model_config_params["parameterization"] == "v":
-            model_type = model_base.ModelType.V_PREDICTION
+    if "parameterization" in model_config_params and model_config_params["parameterization"] == "v":
+        model_type = model_base.ModelType.V_PREDICTION
 
     clip = None
     vae = None

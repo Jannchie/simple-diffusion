@@ -3,26 +3,28 @@
 # 3rd edit by https://github.com/Stability-AI/generative-models
 # 4th edit by https://github.com/comfyanonymous/ComfyUI
 # 5th edit by Forge
+# 6th edit by Jannchie
 
-
+import logging
 import math
+from typing import Any, Optional
+
 import torch
 import torch.nn.functional as F
-from torch import nn, einsum
 from einops import rearrange, repeat
-from typing import Optional, Any
-
-from .diffusionmodules.util import checkpoint, AlphaBlender, timestep_embedding
-from .sub_quadratic_attention import efficient_dot_product_attention
+from torch import einsum, nn
 
 from ldm_patched.modules import model_management
+
+from .diffusionmodules.util import AlphaBlender, checkpoint, timestep_embedding
+from .sub_quadratic_attention import efficient_dot_product_attention
 
 if model_management.xformers_enabled():
     import xformers
     import xformers.ops
 
-from ldm_patched.modules.args_parser import args
 import ldm_patched.modules.ops
+from ldm_patched.modules.args_parser import args
 
 ops = ldm_patched.modules.ops.disable_weight_init
 
@@ -75,7 +77,7 @@ class FeedForward(nn.Module):
         super().__init__()
         inner_dim = int(dim * mult)
         dim_out = default(dim_out, dim)
-        project_in = nn.Sequential(operations.Linear(dim, inner_dim, dtype=dtype, device=device), nn.GELU()) if not glu else GEGLU(dim, inner_dim, dtype=dtype, device=device, operations=operations)
+        project_in = GEGLU(dim, inner_dim, dtype=dtype, device=device, operations=operations) if glu else nn.Sequential(operations.Linear(dim, inner_dim, dtype=dtype, device=device), nn.GELU())
 
         self.net = nn.Sequential(project_in, nn.Dropout(dropout), operations.Linear(inner_dim, dim_out, dtype=dtype, device=device))
 
@@ -90,10 +92,13 @@ def Normalize(in_channels, dtype=None, device=None):
 def attention_basic(q, k, v, heads, mask=None):
     b, _, dim_head = q.shape
     dim_head //= heads
-    scale = dim_head ** -0.5
+    scale = dim_head**-0.5
 
     h = heads
-    q, k, v = map(lambda t: t.unsqueeze(3).reshape(b, -1, heads, dim_head).permute(0, 2, 1, 3).reshape(b * heads, -1, dim_head).contiguous(), (q, k, v),)
+    q, k, v = map(
+        lambda t: t.unsqueeze(3).reshape(b, -1, heads, dim_head).permute(0, 2, 1, 3).reshape(b * heads, -1, dim_head).contiguous(),
+        (q, k, v),
+    )
 
     # force cast to fp32 to avoid overflowing
     if _ATTN_PRECISION == "fp32":
@@ -124,7 +129,7 @@ def attention_sub_quad(query, key, value, heads, mask=None):
     b, _, dim_head = query.shape
     dim_head //= heads
 
-    scale = dim_head ** -0.5
+    scale = dim_head**-0.5
     query = query.unsqueeze(3).reshape(b, -1, heads, dim_head).permute(0, 2, 1, 3).reshape(b * heads, -1, dim_head)
     value = value.unsqueeze(3).reshape(b, -1, heads, dim_head).permute(0, 2, 1, 3).reshape(b * heads, -1, dim_head)
 
@@ -156,7 +161,17 @@ def attention_sub_quad(query, key, value, heads, mask=None):
     if query_chunk_size is None:
         query_chunk_size = 512
 
-    hidden_states = efficient_dot_product_attention(query, key, value, query_chunk_size=query_chunk_size, kv_chunk_size=kv_chunk_size, kv_chunk_size_min=kv_chunk_size_min, use_checkpoint=False, upcast_attention=upcast_attention, mask=mask,)
+    hidden_states = efficient_dot_product_attention(
+        query,
+        key,
+        value,
+        query_chunk_size=query_chunk_size,
+        kv_chunk_size=kv_chunk_size,
+        kv_chunk_size_min=kv_chunk_size_min,
+        use_checkpoint=False,
+        upcast_attention=upcast_attention,
+        mask=mask,
+    )
 
     hidden_states = hidden_states.to(dtype)
 
@@ -167,10 +182,13 @@ def attention_sub_quad(query, key, value, heads, mask=None):
 def attention_split(q, k, v, heads, mask=None):
     b, _, dim_head = q.shape
     dim_head //= heads
-    scale = dim_head ** -0.5
+    scale = dim_head**-0.5
 
     h = heads
-    q, k, v = map(lambda t: t.unsqueeze(3).reshape(b, -1, heads, dim_head).permute(0, 2, 1, 3).reshape(b * heads, -1, dim_head).contiguous(), (q, k, v),)
+    q, k, v = map(
+        lambda t: t.unsqueeze(3).reshape(b, -1, heads, dim_head).permute(0, 2, 1, 3).reshape(b * heads, -1, dim_head).contiguous(),
+        (q, k, v),
+    )
 
     r1 = torch.zeros(q.shape[0], q.shape[1], v.shape[2], device=q.device, dtype=q.dtype)
 
@@ -181,7 +199,7 @@ def attention_split(q, k, v, heads, mask=None):
     else:
         element_size = q.element_size()
 
-    gb = 1024 ** 3
+    gb = 1024**3
     tensor_size = q.shape[0] * q.shape[1] * k.shape[1] * element_size
     modifier = 3
     mem_required = tensor_size * modifier
@@ -255,11 +273,13 @@ except:
 def attention_xformers(q, k, v, heads, mask=None):
     b, _, dim_head = q.shape
     dim_head //= heads
-    if BROKEN_XFORMERS:
-        if b * heads > 65535:
-            return attention_pytorch(q, k, v, heads, mask)
+    if BROKEN_XFORMERS and b * heads > 65535:
+        return attention_pytorch(q, k, v, heads, mask)
 
-    q, k, v = map(lambda t: t.unsqueeze(3).reshape(b, -1, heads, dim_head).permute(0, 2, 1, 3).reshape(b * heads, -1, dim_head).contiguous(), (q, k, v),)
+    q, k, v = map(
+        lambda t: t.unsqueeze(3).reshape(b, -1, heads, dim_head).permute(0, 2, 1, 3).reshape(b * heads, -1, dim_head).contiguous(),
+        (q, k, v),
+    )
 
     if mask is not None:
         pad = 8 - q.shape[1] % 8
@@ -276,7 +296,10 @@ def attention_xformers(q, k, v, heads, mask=None):
 def attention_pytorch(q, k, v, heads, mask=None):
     b, _, dim_head = q.shape
     dim_head //= heads
-    q, k, v = map(lambda t: t.view(b, -1, heads, dim_head).transpose(1, 2), (q, k, v),)
+    q, k, v = map(
+        lambda t: t.view(b, -1, heads, dim_head).transpose(1, 2),
+        (q, k, v),
+    )
 
     out = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=False)
     out = out.transpose(1, 2).reshape(b, -1, heads * dim_head)
@@ -289,7 +312,7 @@ if model_management.xformers_enabled():
     print("Using xformers cross attention")
     optimized_attention = attention_xformers
 elif model_management.pytorch_attention_enabled():
-    print("Using pytorch cross attention")
+    logging.info("Using pytorch cross attention")
     optimized_attention = attention_pytorch
 else:
     if args.attention_split:
@@ -625,7 +648,11 @@ class SpatialVideoTransformer(SpatialTransformer):
         self.in_channels = in_channels
 
         time_embed_dim = self.in_channels * 4
-        self.time_pos_embed = nn.Sequential(operations.Linear(self.in_channels, time_embed_dim, dtype=dtype, device=device), nn.SiLU(), operations.Linear(time_embed_dim, self.in_channels, dtype=dtype, device=device),)
+        self.time_pos_embed = nn.Sequential(
+            operations.Linear(self.in_channels, time_embed_dim, dtype=dtype, device=device),
+            nn.SiLU(),
+            operations.Linear(time_embed_dim, self.in_channels, dtype=dtype, device=device),
+        )
 
         self.time_mixer = AlphaBlender(alpha=merge_factor, merge_strategy=merge_strategy)
 
@@ -664,7 +691,11 @@ class SpatialVideoTransformer(SpatialTransformer):
 
         for it_, (block, mix_block) in enumerate(zip(self.transformer_blocks, self.time_stack)):
             transformer_options["block_index"] = it_
-            x = block(x, context=spatial_context, transformer_options=transformer_options,)
+            x = block(
+                x,
+                context=spatial_context,
+                transformer_options=transformer_options,
+            )
 
             x_mix = x
             x_mix = x_mix + emb

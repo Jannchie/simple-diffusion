@@ -3,20 +3,20 @@
 # 3rd edit by https://github.com/Stability-AI/generative-models
 # 4th edit by https://github.com/comfyanonymous/ComfyUI
 # 5th edit by Forge
-
+# 6th edit by Jannchie
 
 # pytorch_diffusion + derived encoder decoder
 import math
+
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-from einops import rearrange
-from typing import Optional, Any
 
-from ldm_patched.modules import model_management
 import ldm_patched.modules.ops
+from ldm_patched.modules import model_management
 
 ops = ldm_patched.modules.ops.disable_weight_init
+import logging
 
 if model_management.xformers_enabled_vae():
     import xformers
@@ -147,7 +147,7 @@ def slice_attention(q, k, v):
 
     mem_free_total = model_management.get_free_memory(q.device)
 
-    gb = 1024 ** 3
+    gb = 1024**3
     tensor_size = q.shape[0] * q.shape[1] * k.shape[2] * q.element_size()
     modifier = 3 if q.element_size() == 2 else 2.5
     mem_required = tensor_size * modifier
@@ -197,7 +197,10 @@ def normal_attention(q, k, v):
 def xformers_attention(q, k, v):
     # compute attention
     B, C, H, W = q.shape
-    q, k, v = map(lambda t: t.view(B, C, -1).transpose(1, 2).contiguous(), (q, k, v),)
+    q, k, v = map(
+        lambda t: t.view(B, C, -1).transpose(1, 2).contiguous(),
+        (q, k, v),
+    )
 
     try:
         out = xformers.ops.memory_efficient_attention(q, k, v, attn_bias=None)
@@ -210,7 +213,10 @@ def xformers_attention(q, k, v):
 def pytorch_attention(q, k, v):
     # compute attention
     B, C, H, W = q.shape
-    q, k, v = map(lambda t: t.view(B, 1, C, -1).transpose(2, 3).contiguous(), (q, k, v),)
+    q, k, v = map(
+        lambda t: t.view(B, 1, C, -1).transpose(2, 3).contiguous(),
+        (q, k, v),
+    )
 
     try:
         out = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=0.0, is_causal=False)
@@ -233,13 +239,13 @@ class AttnBlock(nn.Module):
         self.proj_out = ops.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
 
         if model_management.xformers_enabled_vae():
-            print("Using xformers attention in VAE")
+            logging.info("Using xformers attention in VAE")
             self.optimized_attention = xformers_attention
         elif model_management.pytorch_attention_enabled():
-            print("Using pytorch attention in VAE")
+            logging.info("Using pytorch attention in VAE")
             self.optimized_attention = pytorch_attention
         else:
-            print("Using split attention in VAE")
+            logging.info("Using split attention in VAE")
             self.optimized_attention = normal_attention
 
     def forward(self, x):
@@ -276,7 +282,12 @@ class Model(nn.Module):
         if self.use_timestep:
             # timestep embedding
             self.temb = nn.Module()
-            self.temb.dense = nn.ModuleList([ops.Linear(self.ch, self.temb_ch), ops.Linear(self.temb_ch, self.temb_ch),])
+            self.temb.dense = nn.ModuleList(
+                [
+                    ops.Linear(self.ch, self.temb_ch),
+                    ops.Linear(self.temb_ch, self.temb_ch),
+                ]
+            )
 
         # downsampling
         self.conv_in = ops.Conv2d(in_channels, self.ch, kernel_size=3, stride=1, padding=1)
@@ -478,8 +489,7 @@ class Decoder(nn.Module):
         block_in = ch * ch_mult[self.num_resolutions - 1]
         curr_res = resolution // 2 ** (self.num_resolutions - 1)
         self.z_shape = (1, z_channels, curr_res, curr_res)
-        print("Working with z of shape {} = {} dimensions.".format(self.z_shape, np.prod(self.z_shape)))
-
+        logging.info(f"Working with z of shape {self.z_shape} = {np.prod(self.z_shape)} dimensions.")
         # z to block_in
         self.conv_in = ops.Conv2d(z_channels, block_in, kernel_size=3, stride=1, padding=1)
 

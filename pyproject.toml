@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "stablediffusion"
+name = "simplediffusion"
 version = "0.1.0"
 description = ""
 authors = ["Jianqi Pan <jannchie@gmail.com>"]

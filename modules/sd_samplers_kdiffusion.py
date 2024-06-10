@@ -189,6 +189,8 @@ class KDiffusionSampler(sd_samplers_common.Sampler):
 
     def sample(self, p, x, conditioning, unconditional_conditioning, steps=None, image_conditioning=None):
         unet_patcher = self.model_wrap.inner_model.forge_objects.unet
+        
+        # load base model to GPU, load controlnet if exists
         sampling_prepare(self.model_wrap.inner_model.forge_objects.unet, x=x)
 
         self.model_wrap.log_sigmas = self.model_wrap.log_sigmas.to(x.device)

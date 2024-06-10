@@ -1,5 +1,7 @@
 import collections
+import contextlib
 import gc
+import logging
 import os.path
 import re
 import sys
@@ -8,38 +10,30 @@ from os import mkdir
 from urllib import request
 
 import numpy as np
+import rich
 import safetensors.torch
 import torch
-from omegaconf import ListConfig, OmegaConf
+from omegaconf import ListConfig
 
 import ldm.modules.midas as midas
-import ldm_patched.modules.model_patcher
-import modules_forge.ops as forge_ops
-from ldm.util import instantiate_from_config
 from ldm_patched.modules import model_management as model_management
-from ldm_patched.modules.ops import manual_cast
 from modules import (
     cache,
     devices,
     errors,
     extra_networks,
     hashes,
-    lowvram,
     modelloader,
     patches,
     paths,
     script_callbacks,
-    sd_disable_initialization,
-    sd_hijack,
-    sd_models_config,
-    sd_models_xl,
-    sd_unet,
     sd_vae,
     shared,
 )
 from modules.timer import Timer
 from modules_forge import forge_loader
 
+console = rich.get_console()
 model_dir = "Stable-diffusion"
 model_path = os.path.abspath(os.path.join(paths.models_path, model_dir))
 
@@ -94,7 +88,12 @@ class CheckpointInfo:
         self.metadata = {}
         if self.is_safetensors:
             try:
-                self.metadata = cache.cached_data_for_file("safetensors-metadata", "checkpoint/" + name, filename, read_metadata)
+                self.metadata = cache.cached_data_for_file(
+                    "safetensors-metadata",
+                    f"checkpoint/{name}",
+                    filename,
+                    read_metadata,
+                )
             except Exception as e:
                 errors.display(e, f"reading metadata for {filename}")
 
@@ -104,7 +103,7 @@ class CheckpointInfo:
         self.hash = model_hash(filename)
 
         self.sha256 = hashes.sha256_from_cache(self.filename, f"checkpoint/{name}")
-        self.shorthash = self.sha256[0:10] if self.sha256 else None
+        self.shorthash = self.sha256[:10] if self.sha256 else None
 
         self.title = name if self.shorthash is None else f"{name} [{self.shorthash}]"
         self.short_title = self.name_for_extra if self.shorthash is None else f"{self.name_for_extra} [{self.shorthash}]"
@@ -123,8 +122,8 @@ class CheckpointInfo:
         if self.sha256 is None:
             return
 
-        shorthash = self.sha256[0:10]
-        if self.shorthash == self.sha256[0:10]:
+        shorthash = self.sha256[:10]
+        if self.shorthash == self.sha256[:10]:
             return self.shorthash
 
         self.shorthash = shorthash
@@ -142,13 +141,11 @@ class CheckpointInfo:
         return self.shorthash
 
 
-try:
+with contextlib.suppress(Exception):
     # this silences the annoying "Some weights of the model checkpoint were not used when initializing..." message at start.
-    from transformers import CLIPModel, logging  # noqa: F401
+    from transformers import logging as transformers_logging
 
-    logging.set_verbosity_error()
-except Exception:
-    pass
+    transformers_logging.set_verbosity_error()
 
 
 def setup_model():
@@ -223,7 +220,7 @@ def model_hash(filename):
 
             file.seek(0x100000)
             m.update(file.read(0x10000))
-            return m.hexdigest()[0:8]
+            return m.hexdigest()[:8]
     except FileNotFoundError:
         return "NOFILE"
 
@@ -232,7 +229,7 @@ def select_checkpoint():
     """Raises `FileNotFoundError` if no checkpoints are found."""
     model_checkpoint = shared.opts.sd_model_checkpoint
 
-    checkpoint_info = checkpoint_aliases.get(model_checkpoint, None)
+    checkpoint_info = checkpoint_aliases.get(model_checkpoint)
     if checkpoint_info is not None:
         return checkpoint_info
 
@@ -344,12 +341,12 @@ def get_checkpoint_state_dict(checkpoint_info: CheckpointInfo, timer):
 
     if checkpoint_info in checkpoints_loaded:
         # use checkpoint cache
-        print(f"Loading weights [{sd_model_hash}] from cache")
+        logging.info(f"Loading weights [{sd_model_hash}] from cache")
         # move to end as latest
         checkpoints_loaded.move_to_end(checkpoint_info)
         return checkpoints_loaded[checkpoint_info]
 
-    print(f"Loading weights [{sd_model_hash}] from {checkpoint_info.filename}")
+    logging.info(f"Loading weights [{sd_model_hash}] from {checkpoint_info.filename}")
     res = read_state_dict(checkpoint_info.filename)
     timer.record("load weights from disk")
 
@@ -634,7 +631,7 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
 
     timer.record("calculate empty prompt")
 
-    print(f"Model loaded in {timer.summary()}.")
+    console.log(f"Model loaded in {timer.summary()}.")
 
     return sd_model
 

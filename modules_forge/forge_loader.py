@@ -1,26 +1,23 @@
-import torch
 import contextlib
 
-from ldm_patched.modules import model_management
-from ldm_patched.modules import model_detection
+import open_clip
+import torch
+from omegaconf import OmegaConf
+from transformers import CLIPTextModel, CLIPTokenizer
 
-from ldm_patched.modules.sd import VAE, CLIP, load_model_weights
+import ldm_patched.modules.clip_vision
 import ldm_patched.modules.model_patcher
 import ldm_patched.modules.utils
-import ldm_patched.modules.clip_vision
-
-from omegaconf import OmegaConf
-from modules.sd_models_config import find_checkpoint_config
-from modules.shared import cmd_opts
-from modules import sd_hijack
-from modules.sd_models_xl import extend_sdxl
 from ldm.util import instantiate_from_config
+from ldm_patched.modules import model_detection, model_management
+from ldm_patched.modules.model_base import ModelType, model_sampling
+from ldm_patched.modules.sd import CLIP, VAE, load_model_weights
+from modules import sd_hijack
+from modules.sd_models_config import find_checkpoint_config
+from modules.sd_models_xl import extend_sdxl
+from modules.shared import cmd_opts
 from modules_forge import forge_clip
 from modules_forge.unet_patcher import UnetPatcher
-from ldm_patched.modules.model_base import model_sampling, ModelType
-
-import open_clip
-from transformers import CLIPTextModel, CLIPTokenizer
 
 
 class FakeObject:

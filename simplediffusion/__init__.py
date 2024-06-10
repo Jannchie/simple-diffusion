@@ -1,18 +1,18 @@
+import logger
+
+logger.initialize()
+
+import logging
 import warnings
 from pathlib import Path
 
-import rich
-
 import modules.sd_models
-from ldm_patched.modules.model_management import load_models_gpu
 from modules.processing import StableDiffusionProcessingTxt2Img, process_images_inner
 from modules.shared_init import initialize
 from simplediffusion.utils import Timer
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
-
-console = rich.get_console()
 
 
 def main():
@@ -21,17 +21,21 @@ def main():
             initialize()
             checkpoint_path = Path("C:/Code/webui_forge_cu121_torch21/webui/models/Stable-diffusion/AOM3B2_orangemixs.safetensors")
             checkpoint_info = modules.sd_models.CheckpointInfo(checkpoint_path)
-            modules.sd_models.load_model(checkpoint_info)
+            sd_model = modules.sd_models.load_model(checkpoint_info)
         p = StableDiffusionProcessingTxt2Img()
+        p.sd_model = sd_model
         p.steps = 20
         p.seed = 47
         p.prompt = "A picture of a ((cat)), (((one girl)))"
         p.outpath_samples = "./outputs"
         with Timer("Process"):
-            process_images_inner(p)
-        pass
+            res = process_images_inner(p)
+        res.images[0].save("outputs/result.png")
+        with Timer("Process"):
+            res = process_images_inner(p)
+        res.images[0].save("outputs/result2.png")
+        logging.info("Done.")
 
 
 if __name__ == "__main__":
     main()
-    pass
