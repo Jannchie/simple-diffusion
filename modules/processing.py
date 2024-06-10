@@ -12,6 +12,7 @@ from typing import Any
 
 import cv2
 import numpy as np
+import PIL.Image
 import rich
 import torch
 from blendmodes.blend import BlendType, blendLayers
@@ -1473,7 +1474,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
 
 @dataclass(repr=False)
 class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
-    init_images: list = None
+    init_images: list[PIL.Image] = None
     resize_mode: int = 0
     denoising_strength: float = 0.75
     image_cfg_scale: float = None
@@ -1507,9 +1508,7 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
 
     @property
     def mask_blur(self):
-        if self.mask_blur_x == self.mask_blur_y:
-            return self.mask_blur_x
-        return None
+        return self.mask_blur_x if self.mask_blur_x == self.mask_blur_y else None
 
     @mask_blur.setter
     def mask_blur(self, value):
@@ -1601,12 +1600,11 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
                 image = image.crop(crop_region)
                 image = images.resize_image(2, image, self.width, self.height)
 
-            if image_mask is not None:
-                if self.inpainting_fill != 1:
-                    image = masking.fill(image, latent_mask)
+            if image_mask is not None and self.inpainting_fill != 1:
+                image = masking.fill(image, latent_mask)
 
-                    if self.inpainting_fill == 0:
-                        self.extra_generation_params["Masked content"] = "fill"
+                if self.inpainting_fill == 0:
+                    self.extra_generation_params["Masked content"] = "fill"
 
             if add_color_corrections:
                 self.color_corrections.append(setup_color_correction(image))

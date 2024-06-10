@@ -134,6 +134,17 @@ class Opts:
     return_grid = True
     grid_save = True
     comma_padding_backtrack = 20
+    # img2img
+    inpaintng_mask_weight = 1.0
+    initial_noise_multiplier = 1.0
+    img2img_color_correction = False
+    save_init_img = False
+    img2img_background_color = "#ffffff"
+    upscaler_for_img2img = None
+    sd_vae_encode_method = "Full"
+    token_merging_ratio_img2img = 0.0
+    token_merging_ratio_hr = 0.0
+    img2img_fix_steps = False
 
 
 opts = Opts()

@@ -1,19 +1,17 @@
 import os
+import re
 import sys
 from collections import namedtuple
 from pathlib import Path
-import re
 
 import torch
 import torch.hub
-
 from torchvision import transforms
 from torchvision.transforms.functional import InterpolationMode
 
-from modules import devices, paths, shared, modelloader, errors
 from ldm_patched.modules import model_management
 from ldm_patched.modules.model_patcher import ModelPatcher
-
+from modules import devices, errors, modelloader, paths, shared
 
 blip_image_eval_size = 384
 clip_model_name = "ViT-L/14"
