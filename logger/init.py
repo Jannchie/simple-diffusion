@@ -7,11 +7,14 @@ from rich.logging import RichHandler
 
 class BetterReprHighlighter(ReprHighlighter):
     def __init__(self):
-        # 将 1.2s, 1.5s 这种时间字符串识别为数字
         super().__init__()
         self.highlights.append(r"(?P<number>\d+\.\d+s)")
 
 
 def initialize():
     FORMAT = "%(name)s: %(message)s"
-    logging.basicConfig(level=logging.INFO, format=FORMAT, datefmt="[%X]", handlers=[RichHandler(highlighter=BetterReprHighlighter())])
+    logging.basicConfig(level=logging.DEBUG, format=FORMAT, datefmt="[%X]", handlers=[RichHandler(highlighter=BetterReprHighlighter())])
+    logging.getLogger("transformers").setLevel(logging.WARNING)
+    logging.getLogger("PIL.Image").setLevel(logging.WARNING)
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    logging.getLogger("git.cmd").setLevel(logging.WARNING)

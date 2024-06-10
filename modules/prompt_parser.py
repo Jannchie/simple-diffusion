@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections import namedtuple
+
 import lark
 
 # a prompt like this: "fantasy landscape with a [mountain:lake:0.25] and [an oak:a christmas tree:0.75][ in foreground::0.6][: in background:0.25] [shoddy:masterful:0.5]"
@@ -189,7 +190,7 @@ def get_learned_conditioning(model, prompts: SdConditioning | list[str], steps, 
 
     for prompt, prompt_schedule in zip(prompts, prompt_schedules):
 
-        cached = cache.get(prompt, None)
+        cached = cache.get(prompt)
         if cached is not None:
             res.append(cached)
             continue

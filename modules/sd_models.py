@@ -547,11 +547,10 @@ def get_empty_cond(sd_model):
     p = processing.StableDiffusionProcessingTxt2Img()
     extra_networks.activate(p, {})
 
-    if hasattr(sd_model, "conditioner"):
-        d = sd_model.get_learned_conditioning([""])
-        return d["crossattn"]
-    else:
+    if not hasattr(sd_model, "conditioner"):
         return sd_model.cond_stage_model([""])
+    d = sd_model.get_learned_conditioning([""])
+    return d["crossattn"]
 
 
 def send_model_to_cpu(m):
@@ -626,12 +625,12 @@ def load_model(checkpoint_info=None, already_loaded_state_dict=None):
 
     timer.record("scripts callbacks")
 
-    with torch.no_grad():
-        sd_model.cond_stage_model_empty_prompt = get_empty_cond(sd_model)
+    # with torch.no_grad():
+    #     sd_model.cond_stage_model_empty_prompt = get_empty_cond(sd_model)
 
     timer.record("calculate empty prompt")
 
-    console.log(f"Model loaded in {timer.summary()}.")
+    logging.info(f"Model loaded in {timer.summary()}.")
 
     return sd_model
 

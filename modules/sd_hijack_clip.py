@@ -3,7 +3,7 @@ from collections import namedtuple
 
 import torch
 
-from modules import prompt_parser, devices, sd_hijack, sd_emphasis
+from modules import devices, prompt_parser, sd_emphasis, sd_hijack
 from modules.shared import opts
 
 

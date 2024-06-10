@@ -31,6 +31,7 @@ def main():
         with Timer("Process"):
             res = process_images_inner(p)
         res.images[0].save("outputs/result.png")
+        p.prompt = "a cat in dark room"
         with Timer("Process"):
             res = process_images_inner(p)
         res.images[0].save("outputs/result2.png")

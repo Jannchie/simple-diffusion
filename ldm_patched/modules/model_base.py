@@ -92,11 +92,9 @@ class BaseModel(torch.nn.Module):
         t = self.model_sampling.timestep(t).float()
         context = context.to(dtype)
         extra_conds = {}
-        for o in kwargs:
-            extra = kwargs[o]
-            if hasattr(extra, "dtype"):
-                if extra.dtype != torch.int and extra.dtype != torch.long:
-                    extra = extra.to(dtype)
+        for o, extra in kwargs.items():
+            if hasattr(extra, "dtype") and extra.dtype not in [torch.int, torch.long]:
+                extra = extra.to(dtype)
             extra_conds[o] = extra
 
         model_output = self.diffusion_model(xc, t, context=context, control=control, transformer_options=transformer_options, **extra_conds).float()

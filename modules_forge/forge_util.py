@@ -1,3 +1,4 @@
+import logging
 import os
 import random
 import string
@@ -38,9 +39,9 @@ def apply_circular_forge(model, tiling_enabled=False):
     if model.tiling_enabled == tiling_enabled:
         return
     if tiling_enabled:
-        console.log("Applying circular padding to all Conv layers in the model.")
+        logging.info("Applying circular padding to all Conv layers in the model.")
     else:
-        console.log("Applying zero padding to all Conv layers in the model.")
+        logging.info("Applying zero padding to all Conv layers in the model.")
     model.tiling_enabled = tiling_enabled
 
     def flatten(el):

@@ -194,12 +194,7 @@ def attention_split(q, k, v, heads, mask=None):
 
     mem_free_total = model_management.get_free_memory(q.device)
 
-    if _ATTN_PRECISION == "fp32":
-        element_size = 4
-    else:
-        element_size = q.element_size()
-
-    gb = 1024**3
+    element_size = 4 if _ATTN_PRECISION == "fp32" else q.element_size()
     tensor_size = q.shape[0] * q.shape[1] * k.shape[1] * element_size
     modifier = 3
     mem_required = tensor_size * modifier
@@ -212,7 +207,8 @@ def attention_split(q, k, v, heads, mask=None):
 
     if steps > 64:
         max_res = math.floor(math.sqrt(math.sqrt(mem_free_total / 2.5)) / 8) * 64
-        raise RuntimeError(f"Not enough memory, use lower resolution (max approx. {max_res}x{max_res}). " f"Need: {mem_required/64/gb:0.1f}GB free, Have:{mem_free_total/gb:0.1f}GB free")
+        gb = 1024**3
+        raise RuntimeError(f"Not enough memory, use lower resolution (max approx. {max_res}x{max_res}). " f"Need: {mem_required/64/gb:0.1f}GB free, Have:{mem_free_total/gb:0.1f}GB free") # type: ignore
 
     # print("steps", steps, mem_required, mem_free_total, modifier, q.element_size(), tensor_size)
     first_op_done = False
@@ -229,11 +225,7 @@ def attention_split(q, k, v, heads, mask=None):
                     s1 = einsum("b i d, b j d -> b i j", q[:, i:end], k) * scale
 
                 if mask is not None:
-                    if len(mask.shape) == 2:
-                        s1 += mask[i:end]
-                    else:
-                        s1 += mask[:, i:end]
-
+                    s1 += mask[i:end] if len(mask.shape) == 2 else mask[:, i:end]
                 s2 = s1.softmax(dim=-1).to(v.dtype)
                 del s1
                 first_op_done = True

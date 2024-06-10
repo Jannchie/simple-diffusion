@@ -129,9 +129,9 @@ def get_total_memory(dev=None, torch_total_too=False):
     return (mem_total, mem_total_torch) if torch_total_too else mem_total
 
 
-total_vram = get_total_memory(get_torch_device()) / (1024 * 1024)
-total_ram = psutil.virtual_memory().total / (1024 * 1024)
-logging.info("Total VRAM {:0.0f} MB, total RAM {:0.0f} MB".format(total_vram, total_ram))
+total_vram = get_total_memory(get_torch_device()) / (1024 * 1024 * 1024)
+total_ram = psutil.virtual_memory().total / (1024 * 1024 * 1024)
+logging.info("Total VRAM {:0.0f} GB, total RAM {:0.0f} GB".format(total_vram, total_ram))
 if not args.always_normal_vram and not args.always_cpu and (lowvram_available and total_vram <= 4096):
     print("Trying to enable lowvram mode because your GPU seems to have 4GB or less. If you don't want this use: --always-normal-vram")
     set_vram_to = VRAMState.LOW_VRAM
@@ -448,8 +448,6 @@ def load_models_gpu(models, memory_required=0):
             current_loaded_models.insert(0, current_loaded_models.pop(index))
             models_already_loaded.append(loaded_model)
         else:
-            if hasattr(x, "model"):
-                logging.info(f"To load target model {x.model.__class__.__name__}")
             models_to_load.append(loaded_model)
 
     if not models_to_load:
@@ -464,7 +462,17 @@ def load_models_gpu(models, memory_required=0):
 
         return
 
-    logging.info(f"Begin to load {len(models_to_load)} model{'s' if len(models_to_load) > 1 else ''}")
+    def get_model_name(model):
+        name = model.__class__.__name__
+        if name == "LoadedModel":
+            return model.model.model.__class__.__name__
+        elif name == "ModelPatcher":
+            return model.model.__class__.__name__
+        else:
+            return name
+
+    model_names = ", ".join([get_model_name(x) for x in models_to_load])
+    logging.info(f"Begin to load {len(models_to_load)} model{'s' if len(models_to_load) > 1 else ''} ({model_names})")
 
     total_memory_required = {}
     for loaded_model in models_to_load:
@@ -490,10 +498,10 @@ def load_models_gpu(models, memory_required=0):
             minimal_inference_memory = minimum_inference_memory()
             estimated_remaining_memory = current_free_mem - model_memory - minimal_inference_memory
 
-            logging.debug(f"[Memory Management] Current Free GPU Memory (MB) = {current_free_mem / (1024 * 1024):,.0f}")
-            logging.debug(f"[Memory Management] Model Memory (MB) = {model_memory / (1024 * 1024):,.0f}")
-            logging.debug(f"[Memory Management] Minimal Inference Memory (MB) = {minimal_inference_memory / (1024 * 1024):,.0f}")
-            logging.debug(f"[Memory Management] Estimated Remaining GPU Memory (MB) = {estimated_remaining_memory / (1024 * 1024):,.0f}")
+            logging.debug(f"[Memory Management] Current Free GPU Memory (GB) = {current_free_mem / (1024 * 1024 * 1024):,.2f}")
+            logging.debug(f"[Memory Management] Model Memory (GB) = {model_memory / (1024 * 1024 * 1024):,.2f}")
+            logging.debug(f"[Memory Management] Minimal Inference Memory (GB) = {minimal_inference_memory / (1024 * 1024 * 1024):,.2f}")
+            logging.debug(f"[Memory Management] Estimated Remaining GPU Memory (GB) = {estimated_remaining_memory / (1024 * 1024 * 1024):,.2f}")
 
             if estimated_remaining_memory < 0:
                 vram_set_state = VRAMState.LOW_VRAM
@@ -507,7 +515,7 @@ def load_models_gpu(models, memory_required=0):
         current_loaded_models.insert(0, loaded_model)
 
     moving_time = time.perf_counter() - execution_start_time
-    logging.info(f"Moving model(s) has taken {moving_time:.2f} seconds")
+    logging.info(f"Moving {model_names} to GPU ({moving_time:.2f} seconds)")
 
     return
 
