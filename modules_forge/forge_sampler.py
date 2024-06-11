@@ -1,13 +1,19 @@
 import torch
-from ldm_patched.modules.conds import CONDRegular, CONDCrossAttn
-from ldm_patched.modules.samplers import sampling_function
+
 from ldm_patched.modules import model_management
+from ldm_patched.modules.conds import CONDCrossAttn, CONDRegular
 from ldm_patched.modules.ops import cleanup_cache
+from ldm_patched.modules.samplers import sampling_function
 
 
 def cond_from_a1111_to_patched_ldm(cond):
     if isinstance(cond, torch.Tensor):
-        result = dict(cross_attn=cond, model_conds=dict(c_crossattn=CONDCrossAttn(cond),))
+        result = dict(
+            cross_attn=cond,
+            model_conds=dict(
+                c_crossattn=CONDCrossAttn(cond),
+            ),
+        )
         return [
             result,
         ]
@@ -61,12 +67,11 @@ def forge_sample(self, denoiser_params, cond_scale, cond_composition):
     else:
         image_cond_in = denoiser_params.image_cond
 
-    if isinstance(image_cond_in, torch.Tensor):
-        if image_cond_in.shape[0] == x.shape[0] and image_cond_in.shape[2] == x.shape[2] and image_cond_in.shape[3] == x.shape[3]:
-            for i in range(len(uncond)):
-                uncond[i]["model_conds"]["c_concat"] = CONDRegular(image_cond_in)
-            for i in range(len(cond)):
-                cond[i]["model_conds"]["c_concat"] = CONDRegular(image_cond_in)
+    if isinstance(image_cond_in, torch.Tensor) and (image_cond_in.shape[0] == x.shape[0] and image_cond_in.shape[2] == x.shape[2] and image_cond_in.shape[3] == x.shape[3]):
+        for i in range(len(uncond)):
+            uncond[i]["model_conds"]["c_concat"] = CONDRegular(image_cond_in)
+        for i in range(len(cond)):
+            cond[i]["model_conds"]["c_concat"] = CONDRegular(image_cond_in)
 
     if control is not None:
         for h in cond + uncond:
@@ -75,8 +80,7 @@ def forge_sample(self, denoiser_params, cond_scale, cond_composition):
     for modifier in model_options.get("conditioning_modifiers", []):
         model, x, timestep, uncond, cond, cond_scale, model_options, seed = modifier(model, x, timestep, uncond, cond, cond_scale, model_options, seed)
 
-    denoised = sampling_function(model, x, timestep, uncond, cond, cond_scale, model_options, seed)
-    return denoised
+    return sampling_function(model, x, timestep, uncond, cond, cond_scale, model_options, seed)
 
 
 def sampling_prepare(unet, x):

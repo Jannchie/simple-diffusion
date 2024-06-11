@@ -9,6 +9,7 @@ from pathlib import Path
 import PIL.Image
 
 import modules.sd_models
+from extensions.sd_forge_controlnet.scripts.controlnet import ControlNetForForgeOfficial
 from modules.processing import (
     StableDiffusionProcessingImg2Img,
     StableDiffusionProcessingTxt2Img,
@@ -26,7 +27,7 @@ def main():
             checkpoint_path = Path("C:/Code/webui_forge_cu121_torch21/webui/models/Stable-diffusion/AOM3B2_orangemixs.safetensors")
             checkpoint_info = modules.sd_models.CheckpointInfo(checkpoint_path)
             sd_model = modules.sd_models.load_model(checkpoint_info)
-
+        
         with Timer("Process"):
             p = StableDiffusionProcessingImg2Img(
                 sd_model=sd_model,

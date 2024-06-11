@@ -12,16 +12,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 
-from .util import (
-    checkpoint,
-    avg_pool_nd,
-    zero_module,
-    timestep_embedding,
-    AlphaBlender,
-)
-from ..attention import SpatialTransformer, SpatialVideoTransformer, default
-from ldm_patched.ldm.util import exists
 import ldm_patched.modules.ops
+from ldm_patched.ldm.util import exists
+
+from ..attention import SpatialTransformer, SpatialVideoTransformer, default
+from .util import AlphaBlender, avg_pool_nd, checkpoint, timestep_embedding, zero_module
 
 ops = ldm_patched.modules.ops.disable_weight_init
 
@@ -174,7 +169,11 @@ class ResBlock(TimestepBlock):
         else:
             padding = kernel_size // 2
 
-        self.in_layers = nn.Sequential(operations.GroupNorm(32, channels, dtype=dtype, device=device), nn.SiLU(), operations.conv_nd(dims, channels, self.out_channels, kernel_size, padding=padding, dtype=dtype, device=device),)
+        self.in_layers = nn.Sequential(
+            operations.GroupNorm(32, channels, dtype=dtype, device=device),
+            nn.SiLU(),
+            operations.conv_nd(dims, channels, self.out_channels, kernel_size, padding=padding, dtype=dtype, device=device),
+        )
 
         self.updown = up or down
 
@@ -192,8 +191,16 @@ class ResBlock(TimestepBlock):
             self.emb_layers = None
             self.exchange_temb_dims = False
         else:
-            self.emb_layers = nn.Sequential(nn.SiLU(), operations.Linear(emb_channels, 2 * self.out_channels if use_scale_shift_norm else self.out_channels, dtype=dtype, device=device),)
-        self.out_layers = nn.Sequential(operations.GroupNorm(32, self.out_channels, dtype=dtype, device=device), nn.SiLU(), nn.Dropout(p=dropout), operations.conv_nd(dims, self.out_channels, self.out_channels, kernel_size, padding=padding, dtype=dtype, device=device),)
+            self.emb_layers = nn.Sequential(
+                nn.SiLU(),
+                operations.Linear(emb_channels, 2 * self.out_channels if use_scale_shift_norm else self.out_channels, dtype=dtype, device=device),
+            )
+        self.out_layers = nn.Sequential(
+            operations.GroupNorm(32, self.out_channels, dtype=dtype, device=device),
+            nn.SiLU(),
+            nn.Dropout(p=dropout),
+            operations.conv_nd(dims, self.out_channels, self.out_channels, kernel_size, padding=padding, dtype=dtype, device=device),
+        )
 
         if self.out_channels == channels:
             self.skip_connection = nn.Identity()
@@ -282,9 +289,19 @@ class VideoResBlock(ResBlock):
             device=device,
             operations=operations,
         )
-        self.time_mixer = AlphaBlender(alpha=merge_factor, merge_strategy=merge_strategy, rearrange_pattern="b t -> b 1 t 1 1",)
+        self.time_mixer = AlphaBlender(
+            alpha=merge_factor,
+            merge_strategy=merge_strategy,
+            rearrange_pattern="b t -> b 1 t 1 1",
+        )
 
-    def forward(self, x: th.Tensor, emb: th.Tensor, num_video_frames: int, image_only_indicator=None,) -> th.Tensor:
+    def forward(
+        self,
+        x: th.Tensor,
+        emb: th.Tensor,
+        num_video_frames: int,
+        image_only_indicator=None,
+    ) -> th.Tensor:
         x = super().forward(x, emb)
 
         x_mix = rearrange(x, "(b t) c h w -> b c t h w", t=num_video_frames)
@@ -412,7 +429,7 @@ class UNetModel(nn.Module):
             self.num_res_blocks = len(channel_mult) * [num_res_blocks]
         else:
             if len(num_res_blocks) != len(channel_mult):
-                raise ValueError("provide num_res_blocks either as an int (globally constant) or " "as a list/tuple (per-level) with the same length as channel_mult")
+                raise ValueError("provide num_res_blocks either as an int (globally constant) or " "as a list/tuple (per-level) with the same length as channel_mult") # type: ignore
             self.num_res_blocks = num_res_blocks
 
         if disable_self_attentions is not None:
@@ -440,7 +457,11 @@ class UNetModel(nn.Module):
         self.default_image_only_indicator = None
 
         time_embed_dim = model_channels * 4
-        self.time_embed = nn.Sequential(operations.Linear(model_channels, time_embed_dim, dtype=self.dtype, device=device), nn.SiLU(), operations.Linear(time_embed_dim, time_embed_dim, dtype=self.dtype, device=device),)
+        self.time_embed = nn.Sequential(
+            operations.Linear(model_channels, time_embed_dim, dtype=self.dtype, device=device),
+            nn.SiLU(),
+            operations.Linear(time_embed_dim, time_embed_dim, dtype=self.dtype, device=device),
+        )
 
         if self.num_classes is not None:
             if isinstance(self.num_classes, int):
@@ -450,7 +471,13 @@ class UNetModel(nn.Module):
                 self.label_emb = nn.Linear(1, time_embed_dim)
             elif self.num_classes == "sequential":
                 assert adm_in_channels is not None
-                self.label_emb = nn.Sequential(nn.Sequential(operations.Linear(adm_in_channels, time_embed_dim, dtype=self.dtype, device=device), nn.SiLU(), operations.Linear(time_embed_dim, time_embed_dim, dtype=self.dtype, device=device),))
+                self.label_emb = nn.Sequential(
+                    nn.Sequential(
+                        operations.Linear(adm_in_channels, time_embed_dim, dtype=self.dtype, device=device),
+                        nn.SiLU(),
+                        operations.Linear(time_embed_dim, time_embed_dim, dtype=self.dtype, device=device),
+                    )
+                )
             else:
                 raise ValueError()
 
@@ -461,7 +488,13 @@ class UNetModel(nn.Module):
         ds = 1
 
         def get_attention_layer(
-            ch, num_heads, dim_head, depth=1, context_dim=None, use_checkpoint=False, disable_self_attn=False,
+            ch,
+            num_heads,
+            dim_head,
+            depth=1,
+            context_dim=None,
+            use_checkpoint=False,
+            disable_self_attn=False,
         ):
             if use_temporal_attention:
                 return SpatialVideoTransformer(
@@ -691,7 +724,11 @@ class UNetModel(nn.Module):
                 self.output_blocks.append(TimestepEmbedSequential(*layers))
                 self._feature_size += ch
 
-        self.out = nn.Sequential(operations.GroupNorm(32, ch, dtype=self.dtype, device=device), nn.SiLU(), zero_module(operations.conv_nd(dims, model_channels, out_channels, 3, padding=1, dtype=self.dtype, device=device)),)
+        self.out = nn.Sequential(
+            operations.GroupNorm(32, ch, dtype=self.dtype, device=device),
+            nn.SiLU(),
+            zero_module(operations.conv_nd(dims, model_channels, out_channels, 3, padding=1, dtype=self.dtype, device=device)),
+        )
         if self.predict_codebook_ids:
             self.id_predictor = nn.Sequential(
                 operations.GroupNorm(32, ch, dtype=self.dtype, device=device),
@@ -729,13 +766,14 @@ class UNetModel(nn.Module):
         h = x
         for id, module in enumerate(self.input_blocks):
             transformer_options["block"] = ("input", id)
-
+            # before input block, apply patches
             for block_modifier in block_modifiers:
                 h = block_modifier(h, "before", transformer_options)
 
             h = forward_timestep_embed(module, h, emb, context, transformer_options, time_context=time_context, num_video_frames=num_video_frames, image_only_indicator=image_only_indicator)
             h = apply_control(h, control, "input")
 
+            # after input block, apply patches
             for block_modifier in block_modifiers:
                 h = block_modifier(h, "after", transformer_options)
 
@@ -752,12 +790,14 @@ class UNetModel(nn.Module):
 
         transformer_options["block"] = ("middle", 0)
 
+        # before middle block, apply patches
         for block_modifier in block_modifiers:
             h = block_modifier(h, "before", transformer_options)
 
         h = forward_timestep_embed(self.middle_block, h, emb, context, transformer_options, time_context=time_context, num_video_frames=num_video_frames, image_only_indicator=image_only_indicator)
         h = apply_control(h, control, "middle")
 
+        # after middle block, apply patches
         for block_modifier in block_modifiers:
             h = block_modifier(h, "after", transformer_options)
 
@@ -773,16 +813,15 @@ class UNetModel(nn.Module):
 
             h = th.cat([h, hsp], dim=1)
             del hsp
-            if len(hs) > 0:
-                output_shape = hs[-1].shape
-            else:
-                output_shape = None
+            output_shape = hs[-1].shape if hs else None
 
+            # before output block, apply patches
             for block_modifier in block_modifiers:
                 h = block_modifier(h, "before", transformer_options)
 
             h = forward_timestep_embed(module, h, emb, context, transformer_options, output_shape, time_context=time_context, num_video_frames=num_video_frames, image_only_indicator=image_only_indicator)
 
+            # after output block, apply patches
             for block_modifier in block_modifiers:
                 h = block_modifier(h, "after", transformer_options)
 
@@ -790,12 +829,7 @@ class UNetModel(nn.Module):
 
         for block_modifier in block_modifiers:
             h = block_modifier(h, "before", transformer_options)
-
-        if self.predict_codebook_ids:
-            h = self.id_predictor(h)
-        else:
-            h = self.out(h)
-
+        h = self.id_predictor(h) if self.predict_codebook_ids else self.out(h)
         for block_modifier in block_modifiers:
             h = block_modifier(h, "after", transformer_options)
 
