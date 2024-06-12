@@ -1,10 +1,7 @@
-import logging
-
 import torch
 
 import ldm_patched.ldm.modules.attention as attention
 from ldm_patched.modules.samplers import sampling_function
-from modules_forge.supported_preprocessor import Preprocessor, PreprocessorParameter
 
 
 def sdp(q, k, v, transformer_options):
@@ -28,7 +25,7 @@ def zero_cat(a, b, dim):
     return a if b.shape[0] == 0 else torch.cat([a, b], dim=dim)
 
 
-class PreprocessorReference(Preprocessor):
+class PreprocessorReference:
     def __init__(self, use_attn=True, use_adain=False, priority=0):
         super().__init__()
         self.use_attn = use_attn
