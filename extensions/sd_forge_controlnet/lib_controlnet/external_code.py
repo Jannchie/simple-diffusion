@@ -1,11 +1,14 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Union, Dict, TypedDict
+from typing import Dict, List, Optional, TypedDict, Union
+
 import numpy as np
+
 from modules import shared
-from lib_controlnet.logging import logger
-from lib_controlnet.enums import InputMode, HiResFixOption
-from modules.api import api
+# from modules.api import api
+
+from ..lib_controlnet.enums import HiResFixOption, InputMode
+from ..lib_controlnet.logging import logger
 
 
 def get_api_version() -> int:

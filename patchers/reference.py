@@ -29,30 +29,36 @@ def zero_cat(a, b, dim):
 
 
 class PreprocessorReference(Preprocessor):
-    def __init__(self, name, use_attn=True, use_adain=True, priority=0):
+    def __init__(self, use_attn=True, use_adain=False, priority=0):
         super().__init__()
-        self.name = name
         self.use_attn = use_attn
         self.use_adain = use_adain
         self.sorting_priority = priority
-        self.tags = ["Reference"]
-        self.slider_resolution = PreprocessorParameter(visible=False)
-        self.slider_1 = PreprocessorParameter(label="Style Fidelity", value=0.5, minimum=0.0, maximum=1.0, step=0.01, visible=True)
-        self.show_control_mode = False
-        self.corp_image_with_a1111_mask_when_in_img2img_inpaint_tab = False
-        self.do_not_need_model = True
+        # self.tags = ["Reference"]
+        # self.slider_resolution = PreprocessorParameter(visible=False)
+        # self.slider_1 = PreprocessorParameter(label="Style Fidelity", value=0.5, minimum=0.0, maximum=1.0, step=0.01, visible=True)
+        # self.show_control_mode = False
+        # self.corp_image_with_a1111_mask_when_in_img2img_inpaint_tab = False
+        # self.do_not_need_model = True
 
-        self.is_recording_style = False
-        self.recorded_attn1 = {}
-        self.recorded_h = {}
+        # self.is_recording_style = False
+        # self.recorded_attn1 = {}
+        # self.recorded_h = {}
 
-    def process_before_every_sampling(self, process, cond, mask, *args, **kwargs):
-        logging.debug(f"not used args: {args}")
-        unit = kwargs["unit"]
-        weight = float(unit.weight)
-        style_fidelity = float(unit.threshold_a)
-        start_percent = float(unit.guidance_start)
-        end_percent = float(unit.guidance_end)
+        self.weight = 1.0
+        self.style_fidelity = 0.5
+        self.start_percent = 0.0
+        self.end_percent = 1.0
+        self.cond = None
+        self.mask = None
+
+    def process_before_every_sampling(self, process):
+        cond = self.cond
+        mask = self.mask
+        weight = self.weight
+        style_fidelity = self.style_fidelity
+        start_percent = self.start_percent
+        end_percent = self.end_percent
 
         if process.sd_model.is_sdxl:
             style_fidelity **= 3.0

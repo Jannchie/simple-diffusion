@@ -1,26 +1,23 @@
-from typing import Optional
-from modules import processing
-
-from lib_controlnet import external_code
-
-from modules_forge.forge_util import HWC3
-
-from PIL import Image, ImageFilter, ImageOps
-from lib_controlnet.lvminthin import lvmin_thin, nake_nms
-
-import torch
-import os
-import functools
-import time
 import base64
+import functools
+import logging
+import os
+import time
+from typing import Any, Callable, Dict, List, Optional
+
+import cv2
 import numpy as np
 import safetensors.torch
-import cv2
-import logging
+import torch
+from PIL import Image, ImageFilter, ImageOps
 
-from typing import Any, Callable, Dict, List
+from modules import processing
 from modules.safe import unsafe_torch_load
-from lib_controlnet.logging import logger
+from modules_forge.forge_util import HWC3
+
+from ..lib_controlnet import external_code
+from ..lib_controlnet.logging import logger
+from ..lib_controlnet.lvminthin import lvmin_thin, nake_nms
 
 
 def load_state_dict(ckpt_path, location="cpu"):
@@ -127,8 +124,9 @@ class TimeMeta(type):
 svgsupport = False
 try:
     import io
-    from svglib.svglib import svg2rlg
+
     from reportlab.graphics import renderPM
+    from svglib.svglib import svg2rlg
 
     svgsupport = True
 except ImportError:

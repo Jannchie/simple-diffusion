@@ -1,18 +1,19 @@
-from typing import Tuple
+import logging
 import math
-import numpy as np
 from enum import IntEnum
 from typing import List, Tuple, Union
+
+import cv2
+import numpy as np
 import torch
 from torch.nn import functional as F
-import logging
-import cv2
 
 Image = np.ndarray
 Boxes = torch.Tensor
 ImageSizeType = Tuple[int, int]
 _RawBoxType = Union[List[float], Tuple[float, ...], torch.Tensor, np.ndarray]
 IntTupleBox = Tuple[int, int, int, int]
+
 
 class BoxMode(IntEnum):
     """
@@ -61,10 +62,7 @@ class BoxMode(IntEnum):
         is_numpy = isinstance(box, np.ndarray)
         single_box = isinstance(box, (list, tuple))
         if single_box:
-            assert len(box) == 4 or len(box) == 5, (
-                "BoxMode.convert takes either a k-tuple/list or an Nxk array/tensor,"
-                " where k == 4 or 5"
-            )
+            assert len(box) == 4 or len(box) == 5, "BoxMode.convert takes either a k-tuple/list or an Nxk array/tensor," " where k == 4 or 5"
             arr = torch.tensor(box)[None, :]
         else:
             # avoid modifying the input box
@@ -79,9 +77,7 @@ class BoxMode(IntEnum):
         ], "Relative mode not yet supported!"
 
         if from_mode == BoxMode.XYWHA_ABS and to_mode == BoxMode.XYXY_ABS:
-            assert (
-                arr.shape[-1] == 5
-            ), "The last dimension of input shape must be 5 for XYWHA format"
+            assert arr.shape[-1] == 5, "The last dimension of input shape must be 5 for XYWHA format"
             original_dtype = arr.dtype
             arr = arr.double()
 
@@ -117,11 +113,7 @@ class BoxMode(IntEnum):
                 arr[:, 2] -= arr[:, 0]
                 arr[:, 3] -= arr[:, 1]
             else:
-                raise NotImplementedError(
-                    "Conversion from BoxMode {} to {} is not supported yet".format(
-                        from_mode, to_mode
-                    )
-                )
+                raise NotImplementedError("Conversion from BoxMode {} to {} is not supported yet".format(from_mode, to_mode))
 
         if single_box:
             return original_type(arr.flatten().tolist())
@@ -129,6 +121,7 @@ class BoxMode(IntEnum):
             return arr.numpy()
         else:
             return arr
+
 
 class MatrixVisualizer:
     """
@@ -154,10 +147,7 @@ class MatrixVisualizer:
     def visualize(self, image_bgr, mask, matrix, bbox_xywh):
         self._check_image(image_bgr)
         self._check_mask_matrix(mask, matrix)
-        if self.inplace:
-            image_target_bgr = image_bgr
-        else:
-            image_target_bgr = image_bgr * 0
+        image_target_bgr = image_bgr if self.inplace else image_bgr * 0
         x, y, w, h = [int(v) for v in bbox_xywh]
         if w <= 0 or h <= 0:
             return image_bgr
@@ -167,15 +157,11 @@ class MatrixVisualizer:
         _EPSILON = 1e-6
         if np.any(matrix_scaled > 255 + _EPSILON):
             logger = logging.getLogger(__name__)
-            logger.warning(
-                f"Matrix has values > {255 + _EPSILON} after " f"scaling, clipping to [0..255]"
-            )
+            logger.warning(f"Matrix has values > {255 + _EPSILON} after scaling, clipping to [0..255]")
         matrix_scaled_8u = matrix_scaled.clip(0, 255).astype(np.uint8)
         matrix_vis = cv2.applyColorMap(matrix_scaled_8u, self.cmap)
         matrix_vis[mask_bg] = image_target_bgr[y : y + h, x : x + w, :][mask_bg]
-        image_target_bgr[y : y + h, x : x + w, :] = (
-            image_target_bgr[y : y + h, x : x + w, :] * (1.0 - self.alpha) + matrix_vis * self.alpha
-        )
+        image_target_bgr[y : y + h, x : x + w, :] = image_target_bgr[y : y + h, x : x + w, :] * (1.0 - self.alpha) + matrix_vis * self.alpha
         return image_target_bgr.astype(np.uint8)
 
     def _resize(self, mask, matrix, w, h):
@@ -195,6 +181,7 @@ class MatrixVisualizer:
         assert len(mask.shape) == 2
         assert mask.dtype == np.uint8
 
+
 class DensePoseResultsVisualizer:
     def visualize(
         self,
@@ -202,11 +189,9 @@ class DensePoseResultsVisualizer:
         results,
     ) -> Image:
         context = self.create_visualization_context(image_bgr)
-        for i, result in enumerate(results):
+        for result in results:
             boxes_xywh, labels, uv = result
-            iuv_array = torch.cat(
-                (labels[None].type(torch.float32), uv * 255.0)
-            ).type(torch.uint8)
+            iuv_array = torch.cat((labels[None].type(torch.float32), uv * 255.0)).type(torch.uint8)
             self.visualize_iuv_arr(context, iuv_array.cpu().numpy(), boxes_xywh)
         image_bgr = self.context_to_image_bgr(context)
         return image_bgr
@@ -223,6 +208,7 @@ class DensePoseResultsVisualizer:
     def get_image_bgr_from_context(self, context):
         return context
 
+
 class DensePoseMaskedColormapResultsVisualizer(DensePoseResultsVisualizer):
     def __init__(
         self,
@@ -234,9 +220,7 @@ class DensePoseMaskedColormapResultsVisualizer(DensePoseResultsVisualizer):
         val_scale=1.0,
         **kwargs,
     ):
-        self.mask_visualizer = MatrixVisualizer(
-            inplace=inplace, cmap=cmap, val_scale=val_scale, alpha=alpha
-        )
+        self.mask_visualizer = MatrixVisualizer(inplace=inplace, cmap=cmap, val_scale=val_scale, alpha=alpha)
         self.data_extractor = data_extractor
         self.segm_extractor = segm_extractor
 
@@ -263,18 +247,14 @@ def _extract_u_from_iuvarr(iuv_arr):
 def _extract_v_from_iuvarr(iuv_arr):
     return iuv_arr[2, :, :]
 
+
 def make_int_box(box: torch.Tensor) -> IntTupleBox:
     int_box = [0, 0, 0, 0]
     int_box[0], int_box[1], int_box[2], int_box[3] = tuple(box.long().tolist())
     return int_box[0], int_box[1], int_box[2], int_box[3]
 
-def densepose_chart_predictor_output_to_result_with_confidences(
-    boxes: Boxes,
-    coarse_segm,
-    fine_segm,
-    u, v
 
-):
+def densepose_chart_predictor_output_to_result_with_confidences(boxes: Boxes, coarse_segm, fine_segm, u, v):
     boxes_xyxy_abs = boxes.clone()
     boxes_xywh_abs = BoxMode.convert(boxes_xyxy_abs, BoxMode.XYXY_ABS, BoxMode.XYWH_ABS)
     box_xywh = make_int_box(boxes_xywh_abs[0])
@@ -284,9 +264,8 @@ def densepose_chart_predictor_output_to_result_with_confidences(
     confidences = []
     return box_xywh, labels, uv
 
-def resample_fine_and_coarse_segm_tensors_to_bbox(
-    fine_segm: torch.Tensor, coarse_segm: torch.Tensor, box_xywh_abs: IntTupleBox
-):
+
+def resample_fine_and_coarse_segm_tensors_to_bbox(fine_segm: torch.Tensor, coarse_segm: torch.Tensor, box_xywh_abs: IntTupleBox):
     """
     Resample fine and coarse segmentation tensors to the given
     bounding box and derive labels for each pixel of the bounding box
@@ -309,12 +288,8 @@ def resample_fine_and_coarse_segm_tensors_to_bbox(
         mode="bilinear",
         align_corners=False,
     ).argmax(dim=1)
-    # combined coarse and fine segmentation
-    labels = (
-        F.interpolate(fine_segm, (h, w), mode="bilinear", align_corners=False).argmax(dim=1)
-        * (coarse_segm_bbox > 0).long()
-    )
-    return labels
+    return F.interpolate(fine_segm, (h, w), mode="bilinear", align_corners=False).argmax(dim=1) * (coarse_segm_bbox > 0).long()
+
 
 def resample_uv_tensors_to_bbox(
     u: torch.Tensor,
@@ -344,4 +319,3 @@ def resample_uv_tensors_to_bbox(
         uv[0][labels == part_id] = u_bbox[0, part_id][labels == part_id]
         uv[1][labels == part_id] = v_bbox[0, part_id][labels == part_id]
     return uv
-

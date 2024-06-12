@@ -1,11 +1,9 @@
 from typing import List, Tuple, Union
 
-import gradio as gr
-
 from modules.processing import StableDiffusionProcessing
 
-from lib_controlnet import external_code
-from lib_controlnet.logging import logger
+from ..lib_controlnet import external_code
+from ..lib_controlnet.logging import logger
 
 
 def field_to_displaytext(fieldname: str) -> str:

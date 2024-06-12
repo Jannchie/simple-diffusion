@@ -151,6 +151,7 @@ def txt2img_image_conditioning(sd_model, x, width, height):
 
 @dataclass(repr=False)
 class StableDiffusionProcessing:
+    patchers: list = None
     sd_model: object = None
     outpath_samples: str = None
     outpath_grids: str = None
@@ -167,7 +168,7 @@ class StableDiffusionProcessing:
     sampler_name: str = None
     batch_size: int = 1
     n_iter: int = 1
-    steps: int = 50
+    steps: int = 20
     cfg_scale: float = 7.0
     width: int = 512
     height: int = 512
@@ -232,11 +233,6 @@ class StableDiffusionProcessing:
     extra_network_data: dict = field(default=None, init=False)
 
     user: str = field(default=None, init=False)
-
-    # sd_model_name: str = field(default=None, init=False)
-    # sd_model_hash: str = field(default=None, init=False)
-    # sd_vae_name: str = field(default=None, init=False)
-    # sd_vae_hash: str = field(default=None, init=False)
 
     is_api: bool = field(default=False, init=False)
 
@@ -1199,22 +1195,21 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
                 self.extra_generation_params["Hires negative prompt"] = self.hr_negative_prompt
 
             self.latent_scale_mode = shared.latent_upscale_modes.get(self.hr_upscaler, None) if self.hr_upscaler is not None else shared.latent_upscale_modes.get(shared.latent_upscale_default_mode, "nearest")
-            if self.enable_hr and self.latent_scale_mode is None:
-                if not any(x.name == self.hr_upscaler for x in shared.sd_upscalers):
-                    raise Exception(f"could not find upscaler named {self.hr_upscaler}")
+            if self.enable_hr and self.latent_scale_mode is None and not any(x.name == self.hr_upscaler for x in shared.sd_upscalers):
+                raise Exception(f"could not find upscaler named {self.hr_upscaler}")
 
             self.calculate_target_resolution()
 
-            if not state.processing_has_refined_job_count:
-                if state.job_count == -1:
-                    state.job_count = self.n_iter
-                if getattr(self, "txt2img_upscale", False):
-                    total_steps = (self.hr_second_pass_steps or self.steps) * state.job_count
-                else:
-                    total_steps = (self.steps + (self.hr_second_pass_steps or self.steps)) * state.job_count
-                shared.total_tqdm.updateTotal(total_steps)
-                state.job_count = state.job_count * 2
-                state.processing_has_refined_job_count = True
+            # if not state.processing_has_refined_job_count:
+            #     if state.job_count == -1:
+            #         state.job_count = self.n_iter
+            #     if getattr(self, "txt2img_upscale", False):
+            #         total_steps = (self.hr_second_pass_steps or self.steps) * state.job_count
+            #     else:
+            #         total_steps = (self.steps + (self.hr_second_pass_steps or self.steps)) * state.job_count
+            #     shared.total_tqdm.updateTotal(total_steps)
+            #     state.job_count = state.job_count * 2
+            #     state.processing_has_refined_job_count = True
 
             if self.hr_second_pass_steps:
                 self.extra_generation_params["Hires steps"] = self.hr_second_pass_steps
@@ -1455,10 +1450,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
                     extra_networks.activate(self, self.extra_network_data)
 
     def get_conds(self):
-        if self.is_hr_pass:
-            return self.hr_c, self.hr_uc
-
-        return super().get_conds()
+        return (self.hr_c, self.hr_uc) if self.is_hr_pass else super().get_conds()
 
     def parse_extra_network_prompts(self):
         res = super().parse_extra_network_prompts()
@@ -1474,7 +1466,7 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
 
 @dataclass(repr=False)
 class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
-    init_images: list[PIL.Image] = None
+    init_images: list[Image.Image] = None
     resize_mode: int = 0
     denoising_strength: float = 0.75
     image_cfg_scale: float = None
@@ -1641,27 +1633,30 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
             self.init_latent = torch.nn.functional.interpolate(self.init_latent, size=(self.height // opt_f, self.width // opt_f), mode="bilinear")
 
         if image_mask is not None:
-            init_mask = latent_mask
-            latmask = init_mask.convert("RGB").resize((self.init_latent.shape[3], self.init_latent.shape[2]))
-            latmask = np.moveaxis(np.array(latmask, dtype=np.float32), 2, 0) / 255
-            latmask = latmask[0]
-            if self.mask_round:
-                latmask = np.around(latmask)
-            latmask = np.tile(latmask[None], (4, 1, 1))
-
-            self.mask = torch.asarray(1.0 - latmask).to(shared.device).type(self.sd_model.dtype)
-            self.nmask = torch.asarray(latmask).to(shared.device).type(self.sd_model.dtype)
-
-            # this needs to be fixed to be done in sample() using actual seeds for batches
-            if self.inpainting_fill == 2:
-                self.init_latent = self.init_latent * self.mask + create_random_tensors(self.init_latent.shape[1:], all_seeds[0 : self.init_latent.shape[0]]) * self.nmask
-                self.extra_generation_params["Masked content"] = "latent noise"
-
-            elif self.inpainting_fill == 3:
-                self.init_latent = self.init_latent * self.mask
-                self.extra_generation_params["Masked content"] = "latent nothing"
-
+            self.process_latent_mask(latent_mask, all_seeds)
         self.image_conditioning = self.img2img_image_conditioning(image * 2 - 1, self.init_latent, image_mask, self.mask_round)
+
+    # TODO Rename this here and in `init`
+    def process_latent_mask(self, latent_mask, all_seeds):
+        init_mask = latent_mask
+        latmask = init_mask.convert("RGB").resize((self.init_latent.shape[3], self.init_latent.shape[2]))
+        latmask = np.moveaxis(np.array(latmask, dtype=np.float32), 2, 0) / 255
+        latmask = latmask[0]
+        if self.mask_round:
+            latmask = np.around(latmask)
+        latmask = np.tile(latmask[None], (4, 1, 1))
+
+        self.mask = torch.asarray(1.0 - latmask).to(shared.device).type(self.sd_model.dtype)
+        self.nmask = torch.asarray(latmask).to(shared.device).type(self.sd_model.dtype)
+
+        # this needs to be fixed to be done in sample() using actual seeds for batches
+        if self.inpainting_fill == 2:
+            self.init_latent = self.init_latent * self.mask + create_random_tensors(self.init_latent.shape[1:], all_seeds[: self.init_latent.shape[0]]) * self.nmask
+            self.extra_generation_params["Masked content"] = "latent noise"
+
+        elif self.inpainting_fill == 3:
+            self.init_latent = self.init_latent * self.mask
+            self.extra_generation_params["Masked content"] = "latent nothing"
 
     def sample(self, conditioning, unconditional_conditioning, seeds, subseeds, subseed_strength, prompts):
         x = self.rng.next()
@@ -1673,8 +1668,12 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
         self.sd_model.forge_objects = self.sd_model.forge_objects_after_applying_lora.shallow_copy()
         apply_token_merging(self.sd_model, self.get_token_merging_ratio())
 
-        if self.scripts is not None:
-            self.scripts.process_before_every_sampling(self, x=self.init_latent, noise=x, c=conditioning, uc=unconditional_conditioning)
+        # TODO: Implement this
+        # if self.scripts is not None:
+        #     self.scripts.process_before_every_sampling(self, x=self.init_latent, noise=x, c=conditioning, uc=unconditional_conditioning)
+        if self.patchers:
+            for patcher in self.patchers:
+                patcher.process_before_every_sampling(self)
 
         if self.modified_noise is not None:
             x = self.modified_noise

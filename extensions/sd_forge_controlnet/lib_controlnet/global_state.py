@@ -2,10 +2,10 @@ import os.path
 import stat
 from collections import OrderedDict
 
-from modules import shared, sd_models
-from lib_controlnet.enums import StableDiffusionVersion
+from modules import sd_models, shared
 from modules_forge.shared import controlnet_dir, supported_preprocessors
 
+from ..lib_controlnet.enums import StableDiffusionVersion
 
 CN_MODEL_EXTS = [".pt", ".pth", ".ckpt", ".safetensors", ".bin", ".patch"]
 
