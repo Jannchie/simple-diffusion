@@ -111,8 +111,9 @@ def timer_decorator(func):
 
 
 class TimeMeta(type):
-    """ Metaclass to record execution time on all methods of the
-    child class. """
+    """Metaclass to record execution time on all methods of the
+    child class."""
+
     def __new__(cls, name, bases, attrs):
         for attr_name, attr_value in attrs.items():
             if callable(attr_value):
@@ -121,16 +122,16 @@ class TimeMeta(type):
 
 
 # svgsupports
+import contextlib
+
 svgsupport = False
-try:
+with contextlib.suppress(ImportError):
     import io
 
     from reportlab.graphics import renderPM
     from svglib.svglib import svg2rlg
 
     svgsupport = True
-except ImportError:
-    pass
 
 
 def svg_preprocess(inputs: Dict, preprocess: Callable):
@@ -138,9 +139,7 @@ def svg_preprocess(inputs: Dict, preprocess: Callable):
         return None
 
     if inputs["image"].startswith("data:image/svg+xml;base64,") and svgsupport:
-        svg_data = base64.b64decode(
-            inputs["image"].replace("data:image/svg+xml;base64,", "")
-        )
+        svg_data = base64.b64decode(inputs["image"].replace("data:image/svg+xml;base64,", ""))
         drawing = svg2rlg(io.BytesIO(svg_data))
         png_data = renderPM.drawToString(drawing, fmt="PNG")
         encoded_string = base64.b64encode(png_data)
@@ -164,11 +163,10 @@ def read_image(img_path: str) -> str:
     """Read image from specified path and return a base64 string."""
     img = cv2.imread(img_path)
     _, bytes = cv2.imencode(".png", img)
-    encoded_image = base64.b64encode(bytes).decode("utf-8")
-    return encoded_image
+    return base64.b64encode(bytes).decode("utf-8")
 
 
-def read_image_dir(img_dir: str, suffixes=('.png', '.jpg', '.jpeg', '.webp')) -> List[str]:
+def read_image_dir(img_dir: str, suffixes=(".png", ".jpg", ".jpeg", ".webp")) -> List[str]:
     """Try read all images in given img_dir."""
     images = []
     for filename in os.listdir(img_dir):
@@ -182,15 +180,13 @@ def read_image_dir(img_dir: str, suffixes=('.png', '.jpg', '.jpeg', '.webp')) ->
 
 
 def align_dim_latent(x: int) -> int:
-    """ Align the pixel dimension (w/h) to latent dimension.
+    """Align the pixel dimension (w/h) to latent dimension.
     Stable diffusion 1:8 ratio for latent/pixel, i.e.,
     1 latent unit == 8 pixel unit."""
     return (x // 8) * 8
 
 
-def prepare_mask(
-    mask: Image.Image, p: processing.StableDiffusionProcessing
-) -> Image.Image:
+def prepare_mask(mask: Image.Image, p: processing.StableDiffusionProcessing) -> Image.Image:
     """
     Prepare an image mask for the inpainting process.
 
@@ -215,7 +211,7 @@ def prepare_mask(
     if getattr(p, "inpainting_mask_invert", False):
         mask = ImageOps.invert(mask)
 
-    if hasattr(p, 'mask_blur_x'):
+    if hasattr(p, "mask_blur_x"):
         if getattr(p, "mask_blur_x", 0) > 0:
             np_mask = np.array(mask)
             kernel_size = 2 * int(2.5 * p.mask_blur_x + 0.5) + 1
@@ -226,9 +222,8 @@ def prepare_mask(
             kernel_size = 2 * int(2.5 * p.mask_blur_y + 0.5) + 1
             np_mask = cv2.GaussianBlur(np_mask, (1, kernel_size), p.mask_blur_y)
             mask = Image.fromarray(np_mask)
-    else:
-        if getattr(p, "mask_blur", 0) > 0:
-            mask = mask.filter(ImageFilter.GaussianBlur(p.mask_blur))
+    elif getattr(p, "mask_blur", 0) > 0:
+        mask = mask.filter(ImageFilter.GaussianBlur(p.mask_blur))
 
     return mask
 
@@ -258,7 +253,7 @@ def set_numpy_seed(p: processing.StableDiffusionProcessing) -> Optional[int]:
         return seed
     except Exception as e:
         logger.warning(e)
-        logger.warning('Warning: Failed to use consistent random seed.')
+        logger.warning("Warning: Failed to use consistent random seed.")
         return None
 
 
@@ -342,7 +337,7 @@ def crop_and_resize_image(detected_map, resize_mode, h, w, fill_border_with_255=
         new_h, new_w, _ = detected_map.shape
         pad_h = max(0, (h - new_h) // 2)
         pad_w = max(0, (w - new_w) // 2)
-        high_quality_background[pad_h:pad_h + new_h, pad_w:pad_w + new_w] = detected_map
+        high_quality_background[pad_h : pad_h + new_h, pad_w : pad_w + new_w] = detected_map
         detected_map = high_quality_background
         detected_map = safe_numpy(detected_map)
         return detected_map
@@ -352,7 +347,7 @@ def crop_and_resize_image(detected_map, resize_mode, h, w, fill_border_with_255=
         new_h, new_w, _ = detected_map.shape
         pad_h = max(0, (new_h - h) // 2)
         pad_w = max(0, (new_w - w) // 2)
-        detected_map = detected_map[pad_h:pad_h+h, pad_w:pad_w+w]
+        detected_map = detected_map[pad_h : pad_h + h, pad_w : pad_w + w]
         detected_map = safe_numpy(detected_map)
         return detected_map
 

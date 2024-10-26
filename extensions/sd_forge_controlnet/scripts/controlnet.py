@@ -78,7 +78,7 @@ class ControlNetForForgeOfficial(scripts.Script):
     def try_crop_image_with_a1111_mask(p: StableDiffusionProcessing, unit: ControlNetUnit, input_image: np.ndarray, resize_mode: external_code.ResizeMode, preprocessor) -> np.ndarray:
         a1111_mask_image: Optional[Image.Image] = getattr(p, "image_mask", None)
         is_only_masked_inpaint = issubclass(type(p), StableDiffusionProcessingImg2Img) and p.inpaint_full_res and a1111_mask_image is not None
-        if preprocessor.corp_image_with_a1111_mask_when_in_img2img_inpaint_tab and is_only_masked_inpaint:
+        if unit.preprocessor.corp_image_with_a1111_mask_when_in_img2img_inpaint_tab and is_only_masked_inpaint:
             logger.info("Crop input image based on A1111 mask.")
             input_image = [input_image[:, :, i] for i in range(input_image.shape[2])]
             input_image = [Image.fromarray(x) for x in input_image]
@@ -233,7 +233,7 @@ class ControlNetForForgeOfficial(scripts.Script):
         if unit.use_preview_as_input:
             unit.module = "None"
 
-        preprocessor = global_state.get_preprocessor(unit.module)
+        preprocessor = unit.preprocessor
 
         input_list, resize_mode = self.get_input_data(p, unit, preprocessor, h, w)
         preprocessor_outputs = []

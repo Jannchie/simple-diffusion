@@ -1,8 +1,9 @@
 import os
-import torch
-import ldm_patched.modules.utils
-import ldm_patched.controlnet
 
+import torch
+
+import ldm_patched.controlnet
+import ldm_patched.modules.utils
 from ldm_patched.modules.controlnet import ControlLora, ControlNet, load_t2i_adapter
 from modules_forge.controlnet import apply_controlnet_advanced
 from modules_forge.shared import add_supported_control_model
@@ -53,7 +54,7 @@ class ControlNetPatcher(ControlModelPatcher):
             while loop:
                 suffix = [".weight", ".bias"]
                 for s in suffix:
-                    k_in = "controlnet_down_blocks.{}{}".format(count, s)
+                    k_in = f"controlnet_down_blocks.{count}{s}"
                     k_out = "zero_convs.{}.0{}".format(count, s)
                     if k_in not in controlnet_data:
                         loop = False
@@ -77,11 +78,7 @@ class ControlNetPatcher(ControlModelPatcher):
                     diffusers_keys[k_in] = k_out
                 count += 1
 
-            new_sd = {}
-            for k in diffusers_keys:
-                if k in controlnet_data:
-                    new_sd[diffusers_keys[k]] = controlnet_data.pop(k)
-
+            new_sd = {diffusers_keys[k]: controlnet_data.pop(k) for k in diffusers_keys if k in controlnet_data}
             leftover_keys = controlnet_data.keys()
             if len(leftover_keys) > 0:
                 print("leftover keys:", leftover_keys)
@@ -115,7 +112,7 @@ class ControlNetPatcher(ControlModelPatcher):
 
         if pth:
             if "difference" in controlnet_data:
-                print("WARNING: Your controlnet model is diff version rather than official float16 model. " "Please use an official float16/float32 model for robust performance.")
+                print("WARNING: Your controlnet model is diff version rather than official float16 model. " "Please use an official float16/float32 model for robust performance.")  # type: ignore
 
             class WeightsLoader(torch.nn.Module):
                 pass

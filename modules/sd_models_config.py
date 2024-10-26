@@ -9,7 +9,7 @@ from modules import devices, paths, sd_disable_initialization, shared
 sd_configs_path = pathlib.Path(__file__).parent.parent / "configs" / "webui"
 # configs/sd
 sd_repo_configs_path = pathlib.Path(__file__).parent.parent / "configs" / "sd"
-sd_xl_repo_configs_path = pathlib.Path(__file__).parent.parent / "configs" / "sdxl"
+sd_xl_repo_configs_path = pathlib.Path(__file__).parent.parent / "configs" / "sdxl" / "inference"
 
 
 config_default = shared.sd_default_config

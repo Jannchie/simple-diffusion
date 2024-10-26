@@ -120,7 +120,7 @@ class GeneralConditioner(nn.Module):
         return batch
 
     def forward(self, batch: Dict, force_zero_embeddings: Optional[List] = None) -> Dict:
-        output = dict()
+        output = {}
         if force_zero_embeddings is None:
             force_zero_embeddings = []
         for embedder in self.embedders:
@@ -150,7 +150,7 @@ class GeneralConditioner(nn.Module):
     def get_unconditional_conditioning(self, batch_c, batch_uc=None, force_uc_zero_embeddings=None):
         if force_uc_zero_embeddings is None:
             force_uc_zero_embeddings = []
-        ucg_rates = list()
+        ucg_rates = []
         for embedder in self.embedders:
             ucg_rates.append(embedder.ucg_rate)
             embedder.ucg_rate = 0.0

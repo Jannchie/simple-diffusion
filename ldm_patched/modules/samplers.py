@@ -2,12 +2,14 @@
 # 2nd edit by Forge Official
 
 
-from ldm_patched.k_diffusion import sampling as k_diffusion_sampling
-from ldm_patched.unipc import uni_pc
-import torch
 import collections
-from ldm_patched.modules import model_management
 import math
+
+import torch
+
+from ldm_patched.k_diffusion import sampling as k_diffusion_sampling
+from ldm_patched.modules import model_management
+from ldm_patched.unipc import uni_pc
 
 
 def get_area_and_mult(conds, x_in, timestep_in):

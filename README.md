@@ -5,15 +5,21 @@ I didn't use the Web UI directly; instead, I used Web UI Forge. This is because 
 For test:
 
 ``` bash
-python .\simplediffusion\__init__.py
+python ./simplediffusion/__init__.py
+```
+
+Coverage:
+
+``` bash
+coverage run  .\simplediffusion\__init__.py; coverage xml
 ```
 
 Roadmap:
 
+- [x] Stable Diffusion XL Support
 - [x] Basic text to image
 - [x] Basic image to image
 - [x] Reference only
-- [ ] ControlNet
+- [x] ControlNet
 - [ ] Other forge built-in extensions
-- [ ] Stable Diffusion XL Support
 - [ ] Stable Diffusion 3 Support

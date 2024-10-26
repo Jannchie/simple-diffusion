@@ -1,18 +1,23 @@
-import os
-import ldm_patched.modules.utils
 import argparse
-
-from modules.paths_internal import models_path
+import os
 from pathlib import Path
 
+import ldm_patched.modules.utils
+from modules.paths_internal import models_path
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument(
-    "--controlnet-dir", type=Path, help="Path to directory with ControlNet models", default=None,
+    "--controlnet-dir",
+    type=Path,
+    help="Path to directory with ControlNet models",
+    default=None,
 )
 parser.add_argument(
-    "--controlnet-preprocessor-models-dir", type=Path, help="Path to directory with annotator model directories", default=None,
+    "--controlnet-preprocessor-models-dir",
+    type=Path,
+    help="Path to directory with annotator model directories",
+    default=None,
 )
 
 cmd_opts = parser.parse_known_args()[0]
@@ -49,12 +54,3 @@ def add_supported_control_model(control_model):
     return
 
 
-def try_load_supported_control_model(ckpt_path):
-    global supported_control_models
-    state_dict = ldm_patched.modules.utils.load_torch_file(ckpt_path, safe_load=True)
-    for supported_type in supported_control_models:
-        state_dict_copy = {k: v for k, v in state_dict.items()}
-        model = supported_type.try_build_from_state_dict(state_dict_copy, ckpt_path)
-        if model is not None:
-            return model
-    return None

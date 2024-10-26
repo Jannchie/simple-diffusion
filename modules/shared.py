@@ -145,6 +145,9 @@ class Opts:
     token_merging_ratio_img2img = 0.0
     token_merging_ratio_hr = 0.0
     img2img_fix_steps = False
+    sdxl_refiner_high_aesthetic_score = 6.0
+    sdxl_refiner_low_aesthetic_score = 2.5
+    no_dpmpp_sde_batch_determinism = False
 
 
 opts = Opts()

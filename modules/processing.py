@@ -285,7 +285,6 @@ class StableDiffusionProcessing:
     @scripts.setter
     def scripts(self, value):
         self.scripts_value = value
-
         if self.scripts_value and self.script_args_value and not self.scripts_setup_complete:
             self.setup_scripts()
 
@@ -509,7 +508,9 @@ class StableDiffusionProcessing:
         total_steps = sampler_config.total_steps(self.steps) if sampler_config else self.steps
         self.step_multiplier = total_steps // self.steps
         self.firstpass_steps = total_steps
-
+        print(prompts)
+        print(negative_prompts)
+        print(self.extra_network_data)
         self.uc = self.get_conds_with_caching(prompt_parser.get_learned_conditioning, negative_prompts, total_steps, [self.cached_uc], self.extra_network_data)
         self.c = self.get_conds_with_caching(prompt_parser.get_multicond_learned_conditioning, prompts, total_steps, [self.cached_c], self.extra_network_data)
 
@@ -818,7 +819,6 @@ def process_images_inner(p: StableDiffusionProcessing) -> Processed:
     with torch.inference_mode():
         with devices.autocast():
             p.init(p.all_prompts, p.all_seeds, p.all_subseeds)
-
             # for OSX, loading the model during sampling changes the generated picture, so it is loaded here
             if shared.opts.live_previews_enable and opts.show_progress_type == "Approx NN":
                 sd_vae_approx.model()
