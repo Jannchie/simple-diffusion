@@ -27,6 +27,7 @@ import modules.sd_models as sd_models
 import modules.sd_vae as sd_vae
 import modules.shared as shared
 import modules.styles
+import simplediffusion.prompt_parser as prompt_parser
 from ldm.data.util import AddMiDaS
 from ldm.models.diffusion.ddpm import LatentDepth2ImageDiffusion
 from modules import (
@@ -34,7 +35,6 @@ from modules import (
     extra_networks,
     infotext_utils,
     masking,
-    prompt_parser,
     rng,
     scripts,
     sd_samplers,
@@ -507,8 +507,10 @@ class StableDiffusionProcessing:
         print(prompts)
         print(negative_prompts)
         print(self.extra_network_data)
-        self.uc = self.get_conds_with_caching(prompt_parser.get_learned_conditioning, negative_prompts, total_steps, [self.cached_uc], self.extra_network_data)
-        self.c = self.get_conds_with_caching(prompt_parser.get_multicond_learned_conditioning, prompts, total_steps, [self.cached_c], self.extra_network_data)
+
+        with devices.autocast():
+            self.uc = prompt_parser.get_learned_conditioning(shared.sd_model, negative_prompts, total_steps, hires_steps=None)
+            self.c = prompt_parser.get_multicond_learned_conditioning(shared.sd_model, prompts, total_steps, hires_steps=None)
 
     def get_conds(self):
         return self.c, self.uc
@@ -726,7 +728,6 @@ def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iter
 
 
 def process_images(p: StableDiffusionProcessing) -> Processed:
-
 
     stored_opts = {k: opts.data[k] if k in opts.data else opts.get_default(k) for k in p.override_settings.keys() if k in opts.data}
 
